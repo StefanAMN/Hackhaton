@@ -21,7 +21,7 @@ SECURITY_HEADERS: dict[str, str] = {
     "X-Frame-Options": "DENY",
     "X-XSS-Protection": "1; mode=block",
     "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
-    "Content-Security-Policy": "default-src 'none'",
+    "Content-Security-Policy": "default-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com;",
     "Referrer-Policy": "no-referrer",
     "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
     "Cache-Control": "no-store",
