@@ -8,6 +8,7 @@ import AskAI from './components/AskAI';
 import Metrics from './components/Metrics';
 import Footer from './components/Footer';
 import Particles from './components/Particles';
+import ErrorBoundary from './components/ErrorBoundary';
 import useScrollReveal from './hooks/useScrollReveal';
 import { AnalysisProvider } from './context/AnalysisContext';
 
@@ -37,9 +38,9 @@ function Workspace() {
             animate={isVisible ? { opacity: 1, y: 0 } : {}}
             transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
-            <CodeUpload />
-            <GraphView />
-            <AskAI />
+            <ErrorBoundary><CodeUpload /></ErrorBoundary>
+            <ErrorBoundary><GraphView /></ErrorBoundary>
+            <ErrorBoundary><AskAI /></ErrorBoundary>
           </motion.div>
         </AnalysisProvider>
       </div>

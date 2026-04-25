@@ -1,12 +1,58 @@
 {
   "version": 1,
-  "revision": 0,
-  "updated_at": "2026-04-25T17:13:13.050310+00:00",
-  "nodes": {},
+  "revision": 2,
+  "updated_at": "2026-04-25T18:15:22.225668+00:00",
+  "nodes": {
+    "1f911028bb4143c9870dbdb4c039d168b8423e68": {
+      "id": "1f911028bb4143c9870dbdb4c039d168b8423e68",
+      "name": "def say_hello(name):",
+      "language": "python",
+      "kind": "function",
+      "seen_count": 2,
+      "issue_count": 4,
+      "tokens": [
+        "name",
+        "say_hello",
+        "def",
+        "hello",
+        "sent",
+        "to",
+        "print",
+        "greeting",
+        "return"
+      ],
+      "updated_at": "2026-04-25T18:15:22.225526+00:00"
+    }
+  },
   "edges": {},
-  "issue_patterns": {},
+  "issue_patterns": {
+    "poten ial vulnerabilitate cross-site scripting xss problem de codificare a ie irii parametrul name este ncorporat direct n irul de ie ire folosind un f-string dac aceast func ie este utilizat ntr-un c": {
+      "signature": "poten ial vulnerabilitate cross-site scripting xss problem de codificare a ie irii parametrul name este ncorporat direct n irul de ie ire folosind un f-string dac aceast func ie este utilizat ntr-un c",
+      "count": 1,
+      "example": "Poten\u021bial\u0103 vulnerabilitate Cross-Site Scripting (XSS) / Problem\u0103 de codificare a ie\u0219irii**: Parametrul `name` este \u00eencorporat direct \u00een \u0219irul de ie\u0219ire folosind un f-string. Dac\u0103 aceast\u0103 func\u021bie este utilizat\u0103 \u00eentr-un context de aplica\u021bie w",
+      "updated_at": "2026-04-25T18:14:23.234019+00:00"
+    },
+    "recomandare ntotdeauna igieniza i sau codifica i corect intrarea furnizat de utilizator nainte de a o reda ntr-un context html pentru framework-uri web utiliza i func iile de auto-escaping ale motorul": {
+      "signature": "recomandare ntotdeauna igieniza i sau codifica i corect intrarea furnizat de utilizator nainte de a o reda ntr-un context html pentru framework-uri web utiliza i func iile de auto-escaping ale motorul",
+      "count": 1,
+      "example": "Recomandare**: \u00centotdeauna igieniza\u021bi sau codifica\u021bi corect intrarea furnizat\u0103 de utilizator \u00eenainte de a o reda \u00eentr-un context HTML. Pentru framework-uri web, utiliza\u021bi func\u021biile de auto-escaping ale motorului de templating \u00eencorporat (de",
+      "updated_at": "2026-04-25T18:14:23.234053+00:00"
+    },
+    "nicio alt problem identificat bug-uri logice race conditions memory leaks sql injection n cadrul acestei func ii specifice": {
+      "signature": "nicio alt problem identificat bug-uri logice race conditions memory leaks sql injection n cadrul acestei func ii specifice",
+      "count": 1,
+      "example": "Nicio alt\u0103 problem\u0103 identificat\u0103 (bug-uri logice, race conditions, memory leaks, SQL injection) \u00een cadrul acestei func\u021bii specifice.",
+      "updated_at": "2026-04-25T18:14:23.234160+00:00"
+    },
+    "poten ial vulnerabilitate cross-site scripting xss problem de codificare a ie irii parametrul name este ncorporat direct n irurile de ie ire at t cel printat c t i cel returnat folosind un f-string da": {
+      "signature": "poten ial vulnerabilitate cross-site scripting xss problem de codificare a ie irii parametrul name este ncorporat direct n irurile de ie ire at t cel printat c t i cel returnat folosind un f-string da",
+      "count": 1,
+      "example": "Poten\u021bial\u0103 vulnerabilitate Cross-Site Scripting (XSS) / Problem\u0103 de codificare a ie\u0219irii**: Parametrul `name` este \u00eencorporat direct \u00een \u0219irurile de ie\u0219ire (at\u00e2t cel printat, c\u00e2t \u0219i cel returnat) folosind un f-string. Dac\u0103 aceast\u0103 func\u021bie es",
+      "updated_at": "2026-04-25T18:15:22.225654+00:00"
+    }
+  },
   "stats": {
-    "ingestions": 0,
-    "total_issues_observed": 0
+    "ingestions": 2,
+    "total_issues_observed": 4
   }
 }

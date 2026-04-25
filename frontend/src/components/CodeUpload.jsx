@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAnalysis } from '../context/AnalysisContext';
 
 const SUPPORTED_FORMATS = ['.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.go'];
@@ -22,36 +22,75 @@ export default function CodeUpload() {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState(null);
   const { runAnalysis, isLoading, error, clearAnalysis } = useAnalysis();
+  const fileInputRef = useRef(null);
+  const dragCountRef = useRef(0);
 
   const handleFile = useCallback((selectedFile) => {
     setFile(selectedFile);
     clearAnalysis();
   }, [clearAnalysis]);
 
+  const handleDragEnter = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCountRef.current++;
+    setIsDragging(true);
+  }, []);
+
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(true);
+    e.dataTransfer.dropEffect = 'copy';
   }, []);
 
   const handleDragLeave = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
+    dragCountRef.current--;
+    if (dragCountRef.current <= 0) {
+      dragCountRef.current = 0;
+      setIsDragging(false);
+    }
   }, []);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
+    dragCountRef.current = 0;
     setIsDragging(false);
-    const dropped = e.dataTransfer.files[0];
+    
+    let dropped = null;
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      dropped = e.dataTransfer.files[0];
+    } else if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      const item = e.dataTransfer.items[0];
+      if (item.kind === 'file') {
+        dropped = item.getAsFile();
+      }
+    }
+    
     if (dropped) handleFile(dropped);
   }, [handleFile]);
+
+  // Prevent browser from opening file if dropped outside the zone
+  useEffect(() => {
+    const preventDefault = (e) => e.preventDefault();
+    window.addEventListener('dragover', preventDefault);
+    window.addEventListener('drop', preventDefault);
+    return () => {
+      window.removeEventListener('dragover', preventDefault);
+      window.removeEventListener('drop', preventDefault);
+    };
+  }, []);
 
   const handleFileSelect = useCallback((e) => {
     const selected = e.target.files[0];
     if (selected) handleFile(selected);
   }, [handleFile]);
+
+  const handleZoneClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
 
   const handleScan = useCallback(async () => {
     if (!file) return;
@@ -79,14 +118,18 @@ export default function CodeUpload() {
         <input
           type="file"
           id="code-file-input"
+          ref={fileInputRef}
           accept=".py,.js,.ts,.jsx,.tsx,.java,.go"
           style={{ display: 'none' }}
           onChange={handleFileSelect}
         />
-        <label
-          htmlFor="code-file-input"
+        <div
           className={`upload-zone ${isDragging ? 'dragging' : ''}`}
-          onDragEnter={handleDragOver}
+          role="button"
+          tabIndex={0}
+          onClick={handleZoneClick}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleZoneClick(); }}
+          onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -106,7 +149,7 @@ export default function CodeUpload() {
               <span key={fmt} className="format-tag">{fmt}</span>
             ))}
           </div>
-        </label>
+        </div>
 
         <AnimatePresence>
           {file && !isLoading && (

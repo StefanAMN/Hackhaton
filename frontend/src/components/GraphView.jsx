@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useAnalysis } from '../context/AnalysisContext';
 
 // Color mapping for edge types
@@ -18,10 +18,11 @@ const NODE_COLORS = {
 
 export default function GraphView() {
   const canvasRef = useRef(null);
-  const [hoveredNode, setHoveredNode] = useState(null);
   const nodesRef = useRef([]);
   const edgesRef = useRef([]);
   const animFrameRef = useRef(null);
+  const hoveredNodeRef = useRef(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState(null);
   const { analysisResult, scanResult, isLoading } = useAnalysis();
 
   const showGraph = (!!scanResult || !!analysisResult) && !isLoading;
@@ -30,6 +31,7 @@ export default function GraphView() {
   const graphData = scanResult || null;
   const chunks = analysisResult?.chunks || [];
 
+  // Build graph data and start animation — does NOT depend on hoveredNode
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !showGraph) return;
@@ -54,7 +56,7 @@ export default function GraphView() {
         const y = 0.5 + Math.sin(angle) * radiusDist;
 
         // Find the full node data from scan result if available
-        const nodeData = (graphData.nodes || []).find(n =>
+        const nodeData = (graphData.nodes || []).find?.(n =>
           typeof n === 'object' && n.name === sym.name
         );
         const inDegree = nodeData?.in_degree || 0;
@@ -75,8 +77,24 @@ export default function GraphView() {
 
       // Use edges from scan result
       if (graphData.edge_types) {
-        // We don't have individual edges in scan result, but we have them if we used /ask/graph
-        // For now, create edges from high_impact_symbols connections
+        // Create visual edges between high-impact symbols and others
+        const highImpact = (graphData.high_impact_symbols || []).map(s =>
+          typeof s === 'object' ? s.name : s
+        );
+        nodeList.forEach(node => {
+          if (highImpact.includes(node.id)) {
+            // Connect high-impact nodes to nearby nodes
+            nodeList.forEach(other => {
+              if (other.id !== node.id && Math.random() < 0.4) {
+                edgeList.push({
+                  from: other.id,
+                  to: node.id,
+                  relation: 'calls',
+                });
+              }
+            });
+          }
+        });
       }
     } else if (chunks.length > 0) {
       // Fallback to chunks
@@ -100,26 +118,6 @@ export default function GraphView() {
     }
 
     if (nodeList.length === 0) return;
-
-    // Build edges from scan result or create sequential edges
-    if (graphData && graphData.edge_types) {
-      // Create visual edges between high-impact symbols and others
-      const highImpact = (graphData.high_impact_symbols || []).map(s => s.name);
-      nodeList.forEach(node => {
-        if (highImpact.includes(node.id)) {
-          // Connect high-impact nodes to nearby nodes
-          nodeList.forEach(other => {
-            if (other.id !== node.id && Math.random() < 0.4) {
-              edgeList.push({
-                from: other.id,
-                to: node.id,
-                relation: 'calls',
-              });
-            }
-          });
-        }
-      });
-    }
 
     // If no edges yet, create sequential connections
     if (edgeList.length === 0 && nodeList.length > 1) {
@@ -145,6 +143,7 @@ export default function GraphView() {
       const edges = edgesRef.current;
       const eased = 1 - Math.pow(1 - animProgress, 3);
       const time = Date.now() / 1000;
+      const currentHovered = hoveredNodeRef.current;
 
       // Subtle floating
       nodes.forEach(n => {
@@ -158,9 +157,9 @@ export default function GraphView() {
         const toNode = nodes.find(n => n.id === edge.to);
         if (!fromNode || !toNode) return;
 
-        const isHighlighted = hoveredNode && (hoveredNode === edge.from || hoveredNode === edge.to);
+        const isHighlighted = currentHovered && (currentHovered === edge.from || currentHovered === edge.to);
         const edgeColor = EDGE_COLORS[edge.relation] || '#ffffff';
-        const opacity = hoveredNode ? (isHighlighted ? 0.7 : 0.06) : 0.2;
+        const opacity = currentHovered ? (isHighlighted ? 0.7 : 0.06) : 0.2;
 
         ctx.beginPath();
         ctx.moveTo(fromNode.px, fromNode.py);
@@ -198,11 +197,11 @@ export default function GraphView() {
       // Draw nodes
       nodes.forEach(n => {
         const colors = NODE_COLORS[n.kind] || NODE_COLORS.unknown;
-        const isHovered = hoveredNode === n.id;
-        const isConnected = hoveredNode && edges.some(
-          e => (e.from === hoveredNode && e.to === n.id) || (e.to === hoveredNode && e.from === n.id)
+        const isHovered = currentHovered === n.id;
+        const isConnected = currentHovered && edges.some(
+          e => (e.from === currentHovered && e.to === n.id) || (e.to === currentHovered && e.from === n.id)
         );
-        const isDimmed = hoveredNode && !isHovered && !isConnected;
+        const isDimmed = currentHovered && !isHovered && !isConnected;
 
         ctx.globalAlpha = eased * (isDimmed ? 0.15 : 1);
 
@@ -260,9 +259,9 @@ export default function GraphView() {
     };
 
     const handleMouseMove = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
+      const canvasRect = canvas.getBoundingClientRect();
+      const mx = e.clientX - canvasRect.left;
+      const my = e.clientY - canvasRect.top;
 
       const found = nodesRef.current.find(n => {
         const dx = mx - n.px;
@@ -270,7 +269,11 @@ export default function GraphView() {
         return Math.sqrt(dx * dx + dy * dy) < n.radius + 5;
       });
 
-      setHoveredNode(found ? found.id : null);
+      const newId = found ? found.id : null;
+      if (hoveredNodeRef.current !== newId) {
+        hoveredNodeRef.current = newId;
+        setHoveredNodeId(newId);
+      }
       canvas.style.cursor = found ? 'pointer' : 'default';
     };
 
@@ -281,10 +284,15 @@ export default function GraphView() {
       cancelAnimationFrame(animFrameRef.current);
       canvas.removeEventListener('mousemove', handleMouseMove);
     };
-  }, [showGraph, graphData, chunks, hoveredNode]);
+    // NOTE: hoveredNode is NOT in the dependency array — it is read from
+    // hoveredNodeRef inside the animation loop to avoid tearing down the
+    // canvas on every hover change.
+  }, [showGraph, graphData, chunks]);
 
-  // Stats
-  const totalNodes = graphData?.nodes || chunks.length;
+  // Stats — handle both integer and array shapes for `nodes`
+  const totalNodes = graphData
+    ? (typeof graphData.nodes === 'number' ? graphData.nodes : Array.isArray(graphData.nodes) ? graphData.nodes.length : 0)
+    : chunks.length;
   const totalEdges = graphData?.edges || 0;
   const edgeTypes = graphData?.edge_types || {};
 

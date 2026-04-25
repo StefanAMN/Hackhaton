@@ -44,6 +44,7 @@ Google (Gemini):
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 from langchain_core.language_models import BaseChatModel
@@ -151,7 +152,7 @@ def _build_llm(settings: Settings) -> BaseChatModel:
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         return ChatGoogleGenerativeAI(
-            model=settings.llm_model or "gemini-2.5-flash",
+            model=settings.llm_model or "gemini-2.0-flash",
             temperature=0.2,
             max_retries=3,
             api_key=settings.google_api_key,
@@ -217,6 +218,16 @@ class AnalysisPipeline:
         self._llm = _build_llm(settings)
         self._chain = _build_parallel_chain(self._llm)
         self._max_concurrency = max(1, settings.pipeline_max_concurrency)
+        
+        # Rate Limiting State
+        # Observație: Fiecare chunk generează 3 request-uri în paralel către LLM
+        self._rate_limit_lock = asyncio.Lock()
+        self._last_request_time = 0.0
+        
+        rpm = max(1, settings.rate_limit_max_requests)
+        window = settings.rate_limit_window_seconds
+        # Intervalul necesar între chunk-uri pentru a nu depăși RPM (considerând 3 request-uri/chunk)
+        self._chunk_interval = (window / rpm) * 3.0
 
     def _cache_key(self, chunk: CodeChunk, memory_revision: int = 0) -> str:
         return compute_cache_key(
@@ -240,7 +251,32 @@ class AnalysisPipeline:
             "memory_context": memory_context,
         }
 
-        result: dict[str, str] = await self._chain.ainvoke(chain_input)
+        # Retry mechanism specifically for Google's 429 RESOURCE_EXHAUSTED (Free Tier limit)
+        max_retries = 3
+        result = None
+        for attempt in range(max_retries):
+            try:
+                # Aplică rate limit global pe pipeline
+                async with self._rate_limit_lock:
+                    now = time.monotonic()
+                    elapsed = now - self._last_request_time
+                    if elapsed < self._chunk_interval:
+                        await asyncio.sleep(self._chunk_interval - elapsed)
+                    self._last_request_time = time.monotonic()
+
+                result = await self._chain.ainvoke(chain_input)
+                break
+            except Exception as e:
+                err_str = str(e)
+                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"API Rate limit hit (429). Waiting 30s before retry {attempt + 1}/{max_retries}...")
+                        await asyncio.sleep(30.0)
+                        continue
+                raise
+                
+        if result is None:
+            raise RuntimeError("Analiza a eșuat după multiple retries.")
 
         analysis = ChunkAnalysis(
             chunk_id=cache_key,

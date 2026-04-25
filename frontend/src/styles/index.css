@@ -1170,6 +1170,13 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--accent-cyan-dim);
 }
 
+.upload-zone.dragging {
+  border-color: var(--accent-cyan);
+  background: var(--accent-cyan-dim);
+  border-style: solid;
+  box-shadow: var(--shadow-glow-cyan);
+}
+
 .upload-zone-icon {
   font-size: var(--text-4xl);
   opacity: 0.6;
