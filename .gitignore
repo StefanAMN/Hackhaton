@@ -1,87 +1,24 @@
-# OS files
-.DS_Store
-Thumbs.db
-Desktop.ini
-
-# Editor / IDE
-.idea/
-.vscode/
-.vscode-test/
-*.swp
-*.swo
-
 # Logs
+logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 
-# Environment / secrets
-.env
-.env.*
-!.env.example
-!.env.sample
-*.pem
-*.key
-*.crt
+node_modules
+dist
+dist-ssr
+*.local
 
-# Python
-__pycache__/
-*.py[cod]
-*.pyd
-*.so
-.Python
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.hypothesis/
-.coverage
-coverage.xml
-htmlcov/
-.tox/
-.nox/
-.venv/
-venv/
-env/
-ENV/
-pip-wheel-metadata/
-build/
-dist/
-*.egg-info/
-
-# Node / frontend
-node_modules/
-package-lock.json
-yarn.lock
-pnpm-lock.yaml
-.npm/
-.parcel-cache/
-.next/
-.nuxt/
-.svelte-kit/
-dist/
-coverage/
-vite.svg
-
-# General build / cache
-.cache/
-.tmp/
-tmp/
-temp/
-out/
-release/
-debug/
-
-# Docker / local infra
-.docker/
-docker-data/
-*.sqlite3
-*.db
-
-# Optional generated artifacts
-*.pdf
-*.zip
-*.tar
-*.tar.gz
-*.rar
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
