@@ -9,6 +9,7 @@ import Metrics from './components/Metrics';
 import Footer from './components/Footer';
 import Particles from './components/Particles';
 import useScrollReveal from './hooks/useScrollReveal';
+import { AnalysisProvider } from './context/AnalysisContext';
 
 function Workspace() {
   const [ref, isVisible] = useScrollReveal({ threshold: 0.05 });
@@ -29,16 +30,18 @@ function Workspace() {
           </p>
         </motion.div>
 
-        <motion.div
-          className="workspace-panels"
-          initial={{ opacity: 0, y: 40 }}
-          animate={isVisible ? { opacity: 1, y: 0 } : {}}
-          transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-        >
-          <CodeUpload />
-          <GraphView />
-          <AskAI />
-        </motion.div>
+        <AnalysisProvider>
+          <motion.div
+            className="workspace-panels"
+            initial={{ opacity: 0, y: 40 }}
+            animate={isVisible ? { opacity: 1, y: 0 } : {}}
+            transition={{ duration: 0.7, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <CodeUpload />
+            <GraphView />
+            <AskAI />
+          </motion.div>
+        </AnalysisProvider>
       </div>
     </section>
   );
