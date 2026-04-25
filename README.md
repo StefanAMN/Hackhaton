@@ -10,6 +10,6 @@
  2)AGENT AI
 - training
 - api key
--prompt chaining (daca dai un singur prompt mare este nasol)
+- prompt chaining (daca dai un singur prompt mare este nasol)
 
 3)LEGATURA DINTRE DÎNȘII
