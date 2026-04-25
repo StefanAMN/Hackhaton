@@ -60,7 +60,7 @@ function CTASection() {
           </h2>
           <p className="cta-description">
             Join developers who are already saving 90% on API costs and getting 
-            instant, accurate answers from their legacy codebases.
+            instant, accurate answers from their code inspection workflows.
           </p>
           <div className="cta-buttons">
             <button className="btn btn-primary btn-lg" id="cta-get-started">

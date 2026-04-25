@@ -7,7 +7,7 @@ const steps = [
     className: 'step-scan',
     icon: '🔍',
     title: 'Scan — Build the Map',
-    description: 'Upload your legacy codebase. Our scanner parses the structure — functions, classes, variables, imports — and builds a dependency graph. No AI needed, zero cost.',
+    description: 'Upload your codebase for code inspection. Our scanner parses the structure — functions, classes, variables, imports — and builds a dependency graph. No AI needed, zero cost.',
     costLabel: 'Cost: $0.00',
     visual: (
       <>
@@ -82,7 +82,7 @@ export default function HowItWorks() {
           <div className="section-label">✦ The Process</div>
           <h2 className="section-title">Three Steps. That's It.</h2>
           <p className="section-subtitle" style={{ margin: '0 auto' }}>
-            From 10,000 lines of incomprehensible legacy code to a precise, 
+            From 10,000 lines in a chaotic code inspection to a precise, 
             20-line AI-powered answer — in seconds.
           </p>
         </motion.div>

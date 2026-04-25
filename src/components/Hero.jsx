@@ -8,7 +8,7 @@ const codeLines = [
   { num: 5, tokens: [{ type: 'keyword', text: '    return ' }, { type: 'plain', text: 'total + tax - discount' }] },
   { num: 6, tokens: [] },
   { num: 7, tokens: [{ type: 'keyword', text: 'def ' }, { type: 'function', text: 'get_subtotal' }, { type: 'plain', text: '(cart):' }] },
-  { num: 8, tokens: [{ type: 'comment', text: '    # Legacy: do not modify' }] },
+  { num: 8, tokens: [{ type: 'comment', text: '    # Code inspection: validated path' }] },
   { num: 9, tokens: [{ type: 'keyword', text: '    return ' }, { type: 'function', text: 'sum' }, { type: 'plain', text: '(i.' }, { type: 'variable', text: 'price' }, { type: 'keyword', text: ' for ' }, { type: 'plain', text: 'i' }, { type: 'keyword', text: ' in ' }, { type: 'plain', text: 'cart)' }] },
   { num: 10, tokens: [] },
   { num: 11, tokens: [{ type: 'keyword', text: 'def ' }, { type: 'function', text: 'apply_tax' }, { type: 'plain', text: '(amount):' }] },
@@ -79,7 +79,7 @@ export default function Hero() {
             initial="hidden"
             animate="visible"
           >
-            Stop burning API credits on legacy code. CodeLens maps your codebase 
+            Stop burning API credits on blind code inspection. CodeLens maps your codebase 
             and gives AI only the lines that matter — saving 90% on costs with zero hallucinations.
           </motion.p>
 
@@ -132,7 +132,7 @@ export default function Hero() {
               <div className="code-window-dot" />
               <div className="code-window-dot" />
               <div className="code-window-dot" />
-              <span className="code-window-title">legacy_checkout.py</span>
+              <span className="code-window-title">inspected_checkout.py</span>
             </div>
             <div className="code-window-body">
               {codeLines.map((line) => (

@@ -10,7 +10,7 @@ export default function Footer() {
             CodeLens
           </div>
           <p className="footer-brand-desc">
-            Stop burning API credits on legacy code. CodeLens maps your codebase 
+            Stop burning API credits on noisy code inspection. CodeLens maps your codebase 
             and sends AI only the 20 lines that matter.
           </p>
         </div>
