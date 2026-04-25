@@ -23,7 +23,7 @@ export default function AskAI() {
       const graphMsg = `🔍 **Graph scan complete** ($0 cost)!\n` +
         `Found ${scanResult.nodes} symbols and ${scanResult.edges} dependency edges.\n` +
         (scanResult.high_impact_symbols?.length > 0
-          ? `\n⚡ High-impact symbols: ${scanResult.high_impact_symbols.map(s => s.name).join(', ')}`
+          ? `\n⚡ High-impact symbols: ${scanResult.high_impact_symbols.map(s => s?.name || 'unknown').join(', ')}`
           : '') +
         `\n\nTry asking impact questions like:\n• "Ce se strică dacă modific [funcție]?"\n• "Cine folosește [funcție]?"\n• "Arată-mi structura codului"`;
 
@@ -42,9 +42,9 @@ export default function AskAI() {
 
   // Show AI analysis result
   useEffect(() => {
-    if (analysisResult && analysisResult.chunks && analysisResult.chunks.length > 0) {
+    if (analysisResult && Array.isArray(analysisResult.chunks) && analysisResult.chunks.length > 0) {
       const chunks = analysisResult.chunks;
-      const totalBugs = chunks.reduce((acc, chunk) => acc + chunk.bugs_and_vulnerabilities.length, 0);
+      const totalBugs = chunks.reduce((acc, chunk) => acc + (chunk?.bugs_and_vulnerabilities?.length || 0), 0);
 
       let summaryText = `🤖 **AI analysis complete!** Found ${chunks.length} functions/classes.`;
       if (totalBugs > 0) {
@@ -57,7 +57,9 @@ export default function AskAI() {
         summaryText += `\n📊 Dependency graph: ${analysisResult.dependency_graph_edges} edges extracted.`;
       }
 
-      summaryText += `\n\n**${chunks[0].chunk_name}**: ${chunks[0].junior_summary}`;
+      const firstChunkName = chunks[0]?.chunk_name || 'unknown';
+      const firstChunkSummary = chunks[0]?.junior_summary || 'No summary available.';
+      summaryText += `\n\n**${firstChunkName}**: ${firstChunkSummary}`;
 
       setMessages(prev => [
         ...prev,
@@ -117,13 +119,13 @@ export default function AskAI() {
       if (analysisResult) {
         const query = userMsg.text.toLowerCase();
         const matchedChunk = analysisResult.chunks.find(c =>
-          c.chunk_name.toLowerCase().includes(query) ||
-          c.junior_summary.toLowerCase().includes(query)
+          c?.chunk_name?.toLowerCase().includes(query) ||
+          c?.junior_summary?.toLowerCase().includes(query)
         );
 
         if (matchedChunk) {
-          reply = `**${matchedChunk.chunk_name}**: ${matchedChunk.junior_summary}`;
-          if (matchedChunk.bugs_and_vulnerabilities.length > 0) {
+          reply = `**${matchedChunk.chunk_name || 'unknown'}**: ${matchedChunk.junior_summary || ''}`;
+          if (matchedChunk.bugs_and_vulnerabilities?.length > 0) {
             reply += `\n\n**Bugs:** ${matchedChunk.bugs_and_vulnerabilities.join(', ')}`;
           }
         } else {

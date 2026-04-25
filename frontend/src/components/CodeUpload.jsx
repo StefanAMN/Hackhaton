@@ -30,21 +30,18 @@ export default function CodeUpload() {
 
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
-    e.stopPropagation();
     setIsDragging(true);
   }, []);
 
   const handleDragLeave = useCallback((e) => {
     e.preventDefault();
-    e.stopPropagation();
     setIsDragging(false);
   }, []);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
-    e.stopPropagation();
     setIsDragging(false);
-    const dropped = e.dataTransfer.files[0];
+    const dropped = e.dataTransfer.files?.[0];
     if (dropped) handleFile(dropped);
   }, [handleFile]);
 

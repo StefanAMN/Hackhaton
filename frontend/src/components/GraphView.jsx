@@ -240,7 +240,7 @@ export default function GraphView() {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        let displayLabel = n.label;
+        let displayLabel = n.label || 'unknown';
         if (displayLabel.length > 14) {
           displayLabel = displayLabel.substring(0, 11) + '...';
         }
@@ -250,7 +250,8 @@ export default function GraphView() {
         if (isHovered) {
           ctx.font = '9px "Space Grotesk", sans-serif';
           ctx.fillStyle = 'rgba(255,255,255,0.5)';
-          ctx.fillText(n.kind + (n.inDegree > 0 ? ` • ${n.inDegree} deps` : ''), n.px, n.py + n.radius + 14);
+          const kindText = n.kind || 'unknown';
+          ctx.fillText(kindText + (n.inDegree > 0 ? ` • ${n.inDegree} deps` : ''), n.px, n.py + n.radius + 14);
         }
 
         ctx.globalAlpha = 1;
