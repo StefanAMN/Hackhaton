@@ -1,0 +1,59 @@
+# docker-compose.yml
+# Servicii locale pentru development.
+# Pornire: docker compose up -d
+
+services:
+
+  # ── Redis (cache) ───────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: lca_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── PostgreSQL (audit log opțional) ─────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: lca_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lca_user
+      POSTGRES_PASSWORD: lca_pass
+      POSTGRES_DB: code_analyzer
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lca_user -d code_analyzer"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis Commander (UI opțional) ───────────────────────────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: lca_redis_ui
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: "local:redis:6379"
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    profiles:
+      - debug  # pornit doar cu: docker compose --profile debug up
+
+volumes:
+  redis_data:
+  postgres_data:

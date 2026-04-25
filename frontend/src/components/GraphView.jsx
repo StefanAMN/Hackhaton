@@ -1,40 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-
-// Placeholder graph data — will be replaced by backend output
-const PLACEHOLDER_NODES = [
-  { id: 'calculate_total', label: 'calculate_total()', type: 'function', x: 0.5, y: 0.3 },
-  { id: 'get_subtotal', label: 'get_subtotal()', type: 'function', x: 0.25, y: 0.55 },
-  { id: 'apply_tax', label: 'apply_tax()', type: 'function', x: 0.75, y: 0.55 },
-  { id: 'check_promo', label: 'check_promo()', type: 'function', x: 0.5, y: 0.75 },
-  { id: 'TAX_RATE', label: 'TAX_RATE', type: 'variable', x: 0.85, y: 0.35 },
-  { id: 'cart', label: 'cart[]', type: 'variable', x: 0.15, y: 0.35 },
-];
-
-const PLACEHOLDER_EDGES = [
-  { from: 'calculate_total', to: 'get_subtotal' },
-  { from: 'calculate_total', to: 'apply_tax' },
-  { from: 'calculate_total', to: 'check_promo' },
-  { from: 'apply_tax', to: 'TAX_RATE' },
-  { from: 'get_subtotal', to: 'cart' },
-  { from: 'check_promo', to: 'cart' },
-];
+import { useAnalysis } from '../context/AnalysisContext';
 
 export default function GraphView() {
   const canvasRef = useRef(null);
   const [hoveredNode, setHoveredNode] = useState(null);
-  const [showGraph, setShowGraph] = useState(false);
   const nodesRef = useRef([]);
   const animFrameRef = useRef(null);
+  const { analysisResult, isLoading } = useAnalysis();
 
-  useEffect(() => {
-    // Simulate showing graph after a short delay
-    const timer = setTimeout(() => setShowGraph(true), 500);
-    return () => clearTimeout(timer);
-  }, []);
+  const showGraph = !!analysisResult && !isLoading;
+  const chunks = analysisResult?.chunks || [];
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !showGraph) return;
+    if (!canvas || !showGraph || chunks.length === 0) return;
 
     const ctx = canvas.getContext('2d');
     const rect = canvas.parentElement.getBoundingClientRect();
@@ -44,16 +23,37 @@ export default function GraphView() {
     const w = canvas.width;
     const h = canvas.height;
 
-    // Initialize node positions
-    nodesRef.current = PLACEHOLDER_NODES.map((n) => ({
-      ...n,
-      px: n.x * w,
-      py: n.y * h,
-      targetX: n.x * w,
-      targetY: n.y * h,
-      radius: n.type === 'function' ? 28 : 22,
-      phase: Math.random() * Math.PI * 2,
-    }));
+    // Generate nodes from chunks (distribute in a circle)
+    nodesRef.current = chunks.map((chunk, idx) => {
+      const angle = (idx / chunks.length) * Math.PI * 2;
+      const radiusDist = 0.3;
+      const x = 0.5 + Math.cos(angle) * radiusDist;
+      const y = 0.5 + Math.sin(angle) * radiusDist;
+
+      return {
+        id: chunk.chunk_id,
+        label: chunk.chunk_name,
+        type: 'function',
+        px: x * w,
+        py: y * h,
+        targetX: x * w,
+        targetY: y * h,
+        radius: 28,
+        phase: Math.random() * Math.PI * 2,
+        data: chunk
+      };
+    });
+
+    // Create some fake edges connecting adjacent nodes for visual appeal
+    const edges = [];
+    if (nodesRef.current.length > 1) {
+      for (let i = 0; i < nodesRef.current.length; i++) {
+        edges.push({
+          from: nodesRef.current[i].id,
+          to: nodesRef.current[(i + 1) % nodesRef.current.length].id
+        });
+      }
+    }
 
     let animProgress = 0;
 
@@ -77,7 +77,7 @@ export default function GraphView() {
       });
 
       // Draw edges
-      PLACEHOLDER_EDGES.forEach((edge) => {
+      edges.forEach((edge) => {
         const fromNode = nodes.find((n) => n.id === edge.from);
         const toNode = nodes.find((n) => n.id === edge.to);
         if (!fromNode || !toNode) return;
@@ -99,7 +99,7 @@ export default function GraphView() {
       nodes.forEach((n) => {
         const colors = getColor(n.type);
         const isHovered = hoveredNode === n.id;
-        const isConnected = hoveredNode && PLACEHOLDER_EDGES.some(
+        const isConnected = hoveredNode && edges.some(
           (e) => (e.from === hoveredNode && e.to === n.id) || (e.to === hoveredNode && e.from === n.id)
         );
         const isDimmed = hoveredNode && !isHovered && !isConnected && hoveredNode !== n.id;
@@ -125,10 +125,16 @@ export default function GraphView() {
 
         // Label
         ctx.fillStyle = isDimmed ? 'rgba(255,255,255,0.2)' : colors.text;
-        ctx.font = `${n.type === 'function' ? '11' : '10'}px "JetBrains Mono", monospace`;
+        ctx.font = `11px "JetBrains Mono", monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(n.label, n.px, n.py);
+        
+        // Truncate label if too long
+        let displayLabel = n.label;
+        if (displayLabel.length > 15) {
+            displayLabel = displayLabel.substring(0, 12) + '...';
+        }
+        ctx.fillText(displayLabel, n.px, n.py);
 
         ctx.globalAlpha = 1;
       });
@@ -158,7 +164,7 @@ export default function GraphView() {
       cancelAnimationFrame(animFrameRef.current);
       canvas.removeEventListener('mousemove', handleMouseMove);
     };
-  }, [showGraph, hoveredNode]);
+  }, [showGraph, chunks, hoveredNode]);
 
   return (
     <div className="workspace-panel" id="graph-view-panel">
@@ -170,17 +176,17 @@ export default function GraphView() {
           <span className="panel-header-title">Dependency Graph</span>
         </div>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-muted)' }}>
-          {showGraph ? '6 nodes · 6 edges' : 'Awaiting scan...'}
+          {showGraph ? `${chunks.length} nodes extracted` : 'Awaiting scan...'}
         </span>
       </div>
       <div className="panel-body">
         <div className="graph-canvas-container">
-          {showGraph ? (
+          {showGraph && chunks.length > 0 ? (
             <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
           ) : (
             <div className="graph-placeholder">
               <div className="graph-placeholder-icon">🕸️</div>
-              <div>Upload & scan code to see the dependency graph</div>
+              <div>{isLoading ? 'Building graph...' : 'Upload & scan code to see the dependency graph'}</div>
             </div>
           )}
         </div>

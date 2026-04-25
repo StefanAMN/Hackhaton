@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAnalysis } from '../context/AnalysisContext';
 
 export default function AskAI() {
+  const { analysisResult } = useAnalysis();
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -11,6 +13,33 @@ export default function AskAI() {
   ]);
   const [input, setInput] = useState('');
   const messagesEndRef = useRef(null);
+
+  // Automatically add a message when analysis is complete
+  useEffect(() => {
+    if (analysisResult && analysisResult.chunks && analysisResult.chunks.length > 0) {
+      const chunks = analysisResult.chunks;
+      const totalBugs = chunks.reduce((acc, chunk) => acc + chunk.bugs_and_vulnerabilities.length, 0);
+      
+      let summaryText = `Analysis complete! I found ${chunks.length} functions/classes.`;
+      if (totalBugs > 0) {
+         summaryText += ` I also identified ${totalBugs} potential bugs/vulnerabilities.`;
+      } else {
+         summaryText += ` The code looks pretty clean with no obvious bugs.`;
+      }
+      
+      summaryText += `\n\nHere is a quick summary of the first component (${chunks[0].chunk_name}): ${chunks[0].junior_summary}`;
+
+      setMessages(prev => [
+        ...prev.filter(m => m.id === 1), // Keep the initial greeting
+        {
+          id: Date.now(),
+          role: 'system',
+          text: summaryText,
+          contextLines: chunks.length,
+        }
+      ]);
+    }
+  }, [analysisResult]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -28,16 +57,39 @@ export default function AskAI() {
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
 
-    // Placeholder: In production, this would call the backend API
-    // For now, show a "waiting for backend" message
+    // If we have analysis result, try to answer based on it
     setTimeout(() => {
+      let reply = "I haven't analyzed any code yet. Please upload and scan a file first.";
+      let contextLines = 0;
+
+      if (analysisResult) {
+        // Very basic local keyword matching against chunks
+        const query = userMsg.text.toLowerCase();
+        const matchedChunk = analysisResult.chunks.find(c => 
+          c.chunk_name.toLowerCase().includes(query) || 
+          c.junior_summary.toLowerCase().includes(query) ||
+          c.source_code.toLowerCase().includes(query)
+        );
+
+        if (matchedChunk) {
+          reply = `Based on the code for \`${matchedChunk.chunk_name}\`:\n\n${matchedChunk.junior_summary}\n\n`;
+          if (matchedChunk.bugs_and_vulnerabilities.length > 0) {
+            reply += `**Note on Bugs:**\n- ${matchedChunk.bugs_and_vulnerabilities.join('\n- ')}`;
+          }
+          contextLines = matchedChunk.source_code.split('\n').length;
+        } else {
+           reply = `I couldn't find a specific answer for that in the ${analysisResult.chunks.length} chunks analyzed. Try asking about a specific function name.`;
+           contextLines = analysisResult.chunks.length;
+        }
+      }
+
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now() + 1,
           role: 'system',
-          text: 'Backend not connected yet. When integrated, I\'ll analyze only the relevant code slice from the dependency graph and give you a precise answer.',
-          contextLines: 0,
+          text: reply,
+          contextLines,
         },
       ]);
     }, 800);
@@ -75,10 +127,10 @@ export default function AskAI() {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3 }}
               >
-                {msg.text}
+                <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
                 {msg.contextLines !== undefined && msg.contextLines > 0 && (
                   <div className="ai-context-badge">
-                    📐 {msg.contextLines} lines analyzed (not {(msg.contextLines * 50).toLocaleString()})
+                    📐 {msg.contextLines} items analyzed
                   </div>
                 )}
               </motion.div>
