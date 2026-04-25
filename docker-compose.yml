@@ -1,0 +1,78 @@
+# docker-compose.yml
+# Root compose file to run the entire project (Frontend, Backend, Redis)
+# Usage: docker-compose up --build
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: codelens_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      # Tell Vite to proxy API requests to the backend container
+      - VITE_BACKEND_URL=http://backend:8000
+      # Use polling for file changes on Windows via Docker Desktop
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: codelens_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DEBUG=true
+    # env_file:
+    #   - ./backend/.env # Uncomment to pass the whole .env file if available
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: codelens_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Optional Postgres Database (Uncomment if needed)
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: codelens_postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: lca_user
+  #     POSTGRES_PASSWORD: lca_pass
+  #     POSTGRES_DB: code_analyzer
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U lca_user -d code_analyzer"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+volumes:
+  redis_data:
+  # postgres_data:
