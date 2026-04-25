@@ -30,13 +30,19 @@ export default function CodeUpload() {
 
   const handleDragOver = useCallback((e) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(true);
   }, []);
 
-  const handleDragLeave = useCallback(() => setIsDragging(false), []);
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(false);
     const dropped = e.dataTransfer.files[0];
     if (dropped) handleFile(dropped);
@@ -80,6 +86,7 @@ export default function CodeUpload() {
         <label
           htmlFor="code-file-input"
           className={`upload-zone ${isDragging ? 'dragging' : ''}`}
+          onDragEnter={handleDragOver}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
