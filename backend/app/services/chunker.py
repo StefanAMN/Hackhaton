@@ -218,6 +218,85 @@ def _fallback_single_chunk(code: str, language: str) -> list[CodeChunk]:
     ]
 
 
+def _estimate_tokens(text: str) -> int:
+    """Estimare rapidă: ~1 token la 4 caractere (heuristic)."""
+    return max(1, len(text) // 4)
+
+
+def split_chunks_by_token_limit(chunks: list[CodeChunk], max_tokens: int) -> list[CodeChunk]:
+    """
+    Taie chunk-urile foarte mari pentru a limita costul prompturilor LLM.
+
+    Partitiile pastreaza ordinea si adauga sufixul `#partN` la nume.
+    """
+    if max_tokens <= 0:
+        return chunks
+
+    output: list[CodeChunk] = []
+    for chunk in chunks:
+        if _estimate_tokens(chunk.source) <= max_tokens:
+            output.append(chunk)
+            continue
+
+        parts = _split_source_by_lines(chunk.source, max_tokens=max_tokens)
+        line_cursor = chunk.start_line
+
+        for idx, part in enumerate(parts, start=1):
+            line_count = max(1, part.count("\n") + 1)
+            end_line = line_cursor + line_count - 1
+            output.append(
+                CodeChunk(
+                    name=f"{chunk.name}#part{idx}",
+                    kind=chunk.kind,
+                    source=part,
+                    start_line=line_cursor,
+                    end_line=end_line,
+                    language=chunk.language,
+                )
+            )
+            line_cursor = end_line + 1
+
+    return output
+
+
+def _split_source_by_lines(source: str, max_tokens: int) -> list[str]:
+    """Imparte un text mare in parti bazate pe linii si limita de tokeni."""
+    max_chars = max(32, max_tokens * 4)
+    lines = source.splitlines()
+
+    if not lines:
+        return [source]
+
+    parts: list[str] = []
+    current: list[str] = []
+    current_size = 0
+
+    for line in lines:
+        line_size = len(line) + 1
+
+        if current and current_size + line_size > max_chars:
+            parts.append("\n".join(current))
+            current = [line]
+            current_size = line_size
+            continue
+
+        if not current and line_size > max_chars:
+            # Linie foarte mare: o taiem in bucati fixe.
+            for i in range(0, len(line), max_chars):
+                parts.append(line[i : i + max_chars])
+            current = []
+            current_size = 0
+            continue
+
+        current.append(line)
+        current_size += line_size
+
+    if current:
+        parts.append("\n".join(current))
+
+    return parts or [source]
+
+
 # ── Public factory ────────────────────────────────────────────────────────────
 
 def get_chunker(language: str) -> ChunkerProtocol:

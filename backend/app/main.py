@@ -26,6 +26,7 @@ from app.core.config import get_settings
 from app.middleware.security import RateLimitMiddleware, SecurityHeadersMiddleware
 from app.routers.analyze import router as analyze_router
 from app.services.cache import CacheService
+from app.services.knowledge_graph import KnowledgeGraphService
 from app.services.pipeline import AnalysisPipeline
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -63,11 +64,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # ── Inițializare singleton-uri ─────────────────────────────────────────
     cache = CacheService(settings)
+    knowledge_graph = KnowledgeGraphService(settings)
     pipeline = AnalysisPipeline(settings, cache)
 
     app.state.cache = cache
+    app.state.knowledge_graph = knowledge_graph
     app.state.pipeline = pipeline
-    logger.info("✅ CacheService și AnalysisPipeline inițializate.")
+    logger.info("✅ CacheService, KnowledgeGraphService și AnalysisPipeline inițializate.")
 
     yield
 
@@ -106,8 +109,8 @@ app.add_middleware(
 # 2. Rate limiting
 app.add_middleware(
     RateLimitMiddleware,
-    max_requests=20,
-    window_seconds=60,
+    max_requests=settings.rate_limit_max_requests,
+    window_seconds=settings.rate_limit_window_seconds,
 )
 
 # 3. Security headers (OWASP)

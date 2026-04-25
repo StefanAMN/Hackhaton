@@ -60,5 +60,45 @@ class AnalyzeResponse(BaseModel):
 
     language_detected: str
     total_chunks: int
+    chunks_detected: int = Field(
+        default=0,
+        description="Numărul de chunk-uri detectate înainte de prefilter.",
+    )
+    chunks_analyzed: int = Field(
+        default=0,
+        description="Numărul de chunk-uri trimise efectiv la AI.",
+    )
+    chunks_skipped_by_filter: int = Field(
+        default=0,
+        description="Numărul de chunk-uri eliminate în etapa de prefilter.",
+    )
+    filter_applied: bool = Field(
+        default=False,
+        description="True dacă s-a aplicat prefilter înainte de analiză AI.",
+    )
+    filter_strategy: str = Field(
+        default="none",
+        description="Strategia de filtrare folosită (de ex. bm25-lite+risk-rules).",
+    )
+    memory_enabled: bool = Field(
+        default=False,
+        description="True dacă knowledge graph memory a fost folosită în această analiză.",
+    )
+    memory_context_chunks: int = Field(
+        default=0,
+        description="Numărul de chunk-uri pentru care s-a găsit context în memorie.",
+    )
+    memory_boosted_chunks: int = Field(
+        default=0,
+        description="Numărul de chunk-uri care au primit memory boost la prefilter.",
+    )
+    memory_revision: int = Field(
+        default=0,
+        description="Revisia curentă a knowledge graph-ului.",
+    )
+    memory_nodes_total: int = Field(
+        default=0,
+        description="Numărul total de noduri din knowledge graph după ingest.",
+    )
     chunks: list[ChunkAnalysis]
     processing_time_ms: float

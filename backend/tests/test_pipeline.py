@@ -31,6 +31,7 @@ def mock_settings():
     settings.llm_provider = "openai"
     settings.llm_model = "gpt-4o"
     settings.openai_api_key = "sk-test"
+    settings.pipeline_max_concurrency = 5
     return settings
 
 
@@ -38,6 +39,7 @@ def mock_settings():
 def mock_cache():
     cache = MagicMock()
     cache.get = AsyncMock(return_value=None)
+    cache.get_many = AsyncMock(return_value={})
     cache.set = AsyncMock(return_value=None)
     return cache
 

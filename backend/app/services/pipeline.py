@@ -89,6 +89,8 @@ BUGS_PROMPT = ChatPromptTemplate.from_messages(
         ),
         (
             "human",
+            "Context din knowledge graph (memorie istorică):\n"
+            "{memory_context}\n\n"
             "Analizează codul următor:\n\n```{language}\n{code}\n```",
         ),
     ]
@@ -214,34 +216,32 @@ class AnalysisPipeline:
         self._cache = cache
         self._llm = _build_llm(settings)
         self._chain = _build_parallel_chain(self._llm)
+        self._max_concurrency = max(1, settings.pipeline_max_concurrency)
 
-    async def analyze_chunk(self, chunk: CodeChunk) -> ChunkAnalysis:
-        """Analizează un singur chunk — cu fallback din cache."""
-        cache_key = compute_cache_key(
+    def _cache_key(self, chunk: CodeChunk, memory_revision: int = 0) -> str:
+        return compute_cache_key(
             content=chunk.source,
             language=chunk.language,
+            provider=self._settings.llm_provider,
             model=self._settings.llm_model,
+            memory_revision=memory_revision,
         )
 
-        # ── 1. Cache lookup ───────────────────────────────────────────────────
-        cached = await self._cache.get(cache_key)
-        if cached is not None:
-            logger.info("Cache HIT pentru chunk '%s' (key=%s…)", chunk.name, cache_key[:8])
-            return cached
-
-        logger.info("Cache MISS — apel API pentru chunk '%s'", chunk.name)
-
-        # ── 2. Apel paralel LangChain ─────────────────────────────────────────
+    async def _analyze_chunk_no_cache(
+        self,
+        chunk: CodeChunk,
+        cache_key: str,
+        memory_context: str,
+    ) -> ChunkAnalysis:
+        """Analizeaza un chunk fara lookup in cache; apelat doar pentru cache MISS."""
         chain_input: dict[str, Any] = {
             "code": chunk.source,
             "language": chunk.language,
+            "memory_context": memory_context,
         }
 
-        # ainvoke rulează chain-ul async; RunnableParallel intern folosește
-        # asyncio.gather() pentru cele 3 sub-task-uri
         result: dict[str, str] = await self._chain.ainvoke(chain_input)
 
-        # ── 3. Construim răspunsul tipizat ────────────────────────────────────
         analysis = ChunkAnalysis(
             chunk_id=cache_key,
             chunk_name=chunk.name,
@@ -252,22 +252,81 @@ class AnalysisPipeline:
             junior_summary=result["junior_summary"],
         )
 
-        # ── 4. Scriem în cache ────────────────────────────────────────────────
         await self._cache.set(cache_key, analysis)
-
         return analysis
 
-    async def analyze_all(self, chunks: list[CodeChunk]) -> list[ChunkAnalysis]:
+    async def analyze_chunk(
+        self,
+        chunk: CodeChunk,
+        memory_context: str = "Nu există context istoric relevant.",
+        memory_revision: int = 0,
+    ) -> ChunkAnalysis:
+        """Analizează un singur chunk — cu fallback din cache."""
+        cache_key = self._cache_key(chunk, memory_revision=memory_revision)
+
+        # ── 1. Cache lookup ───────────────────────────────────────────────────
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            logger.info("Cache HIT pentru chunk '%s' (key=%s…)", chunk.name, cache_key[:8])
+            return cached.model_copy(update={"cached": True})
+
+        logger.info("Cache MISS — apel API pentru chunk '%s'", chunk.name)
+        return await self._analyze_chunk_no_cache(chunk, cache_key, memory_context)
+
+    async def analyze_all(
+        self,
+        chunks: list[CodeChunk],
+        memory_contexts: dict[str, str] | None = None,
+        memory_revision: int = 0,
+    ) -> list[ChunkAnalysis]:
         """
-        Analizează toate chunk-urile în paralel (gather la nivel de chunk).
+        Analizează toate chunk-urile cu pipeline optimizat:
+        1) MGET cache pentru toate cheile
+        2) AI doar pe MISS-uri
+        3) menține ordinea chunk-urilor inițiale
 
         Atenție: pentru coduri cu sute de funcții, limitează concurența cu
         asyncio.Semaphore pentru a nu depăși rate limit-urile API.
         """
-        sem = asyncio.Semaphore(5)  # max 5 chunk-uri simultane
+        if not chunks:
+            return []
 
-        async def _bounded(chunk: CodeChunk) -> ChunkAnalysis:
+        memory_contexts = memory_contexts or {}
+        keys = [self._cache_key(chunk, memory_revision=memory_revision) for chunk in chunks]
+        cached_by_key = await self._cache.get_many(keys)
+
+        ordered_results: list[ChunkAnalysis | None] = [None] * len(chunks)
+        misses: list[tuple[int, CodeChunk, str]] = []
+
+        for idx, (chunk, key) in enumerate(zip(chunks, keys)):
+            cached = cached_by_key.get(key)
+            if cached is not None:
+                ordered_results[idx] = cached.model_copy(update={"cached": True})
+                continue
+            misses.append((idx, chunk, key))
+
+        logger.info(
+            "Batch cache lookup: %d hit-uri, %d miss-uri",
+            len(chunks) - len(misses),
+            len(misses),
+        )
+
+        sem = asyncio.Semaphore(self._max_concurrency)
+
+        async def _bounded(idx: int, chunk: CodeChunk, key: str) -> tuple[int, ChunkAnalysis]:
             async with sem:
-                return await self.analyze_chunk(chunk)
+                memory_context = memory_contexts.get(
+                    chunk.name,
+                    "Nu există context istoric relevant.",
+                )
+                analysis = await self._analyze_chunk_no_cache(chunk, key, memory_context)
+                return idx, analysis
 
-        return list(await asyncio.gather(*[_bounded(c) for c in chunks]))
+        if misses:
+            generated = await asyncio.gather(
+                *[_bounded(idx, chunk, key) for idx, chunk, key in misses]
+            )
+            for idx, analysis in generated:
+                ordered_results[idx] = analysis
+
+        return [result for result in ordered_results if result is not None]

@@ -15,6 +15,7 @@ from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.models.schemas import ChunkAnalysis
 from app.services.cache import CacheService
+from app.services.knowledge_graph import KnowledgeGraphService
 from app.services.pipeline import AnalysisPipeline
 
 
@@ -82,16 +83,40 @@ def mock_pipeline(mock_cache) -> AnalysisPipeline:
     return pipeline
 
 
+@pytest.fixture
+def mock_knowledge_graph() -> KnowledgeGraphService:
+    graph = MagicMock(spec=KnowledgeGraphService)
+    graph.build_memory_context = AsyncMock(return_value={})
+    graph.get_chunk_boosts = AsyncMock(return_value={})
+    graph.get_revision = AsyncMock(return_value=0)
+    graph.learn_from_analysis = AsyncMock(
+        return_value={"nodes_updated": 0, "edges_updated": 0, "patterns_updated": 0}
+    )
+    graph.get_stats = AsyncMock(
+        return_value={
+            "enabled": True,
+            "revision": 0,
+            "nodes": 0,
+            "edges": 0,
+            "issue_patterns": 0,
+            "ingestions": 0,
+            "updated_at": "2026-01-01T00:00:00+00:00",
+        }
+    )
+    return graph
+
+
 # ── Async HTTP client cu app.state injectat ───────────────────────────────────
 
 @pytest.fixture
-async def client(mock_pipeline, mock_cache):
+async def client(mock_pipeline, mock_cache, mock_knowledge_graph):
     """
     AsyncClient cu app.state populat cu mock-uri.
     Compatibil cu pattern-ul de singleton din lifespan.
     """
     # Injectăm mock-urile direct în app.state (bypass lifespan)
     app.state.cache = mock_cache
+    app.state.knowledge_graph = mock_knowledge_graph
     app.state.pipeline = mock_pipeline
 
     async with AsyncClient(
@@ -103,6 +128,8 @@ async def client(mock_pipeline, mock_cache):
     # Cleanup state după test
     if hasattr(app.state, "cache"):
         del app.state.cache
+    if hasattr(app.state, "knowledge_graph"):
+        del app.state.knowledge_graph
     if hasattr(app.state, "pipeline"):
         del app.state.pipeline
 
@@ -119,6 +146,7 @@ async def raw_client():
     """
     # State minimal pentru a nu crăpa la startup
     app.state.cache = MagicMock(spec=CacheService)
+    app.state.knowledge_graph = MagicMock(spec=KnowledgeGraphService)
     app.state.pipeline = MagicMock(spec=AnalysisPipeline)
 
     async with AsyncClient(
@@ -129,5 +157,7 @@ async def raw_client():
 
     if hasattr(app.state, "cache"):
         del app.state.cache
+    if hasattr(app.state, "knowledge_graph"):
+        del app.state.knowledge_graph
     if hasattr(app.state, "pipeline"):
         del app.state.pipeline

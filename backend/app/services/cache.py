@@ -24,15 +24,18 @@ logger = logging.getLogger(__name__)
 def compute_cache_key(
     content: str,
     language: str,
+    provider: str,
     model: str,
+    memory_revision: int = 0,
 ) -> str:
     """
     Generează o cheie deterministă SHA-256 pentru un chunk.
 
-    Includem și limbajul și modelul în hash pentru a evita coliziunile
+    Includem limbajul, provider-ul, modelul și memory_revision în hash pentru
+    a evita coliziunile între contexte de memorie diferite.
     între analize pe același cod cu modele/limbaje diferite.
     """
-    raw = f"{language}::{model}::{content}"
+    raw = f"{language}::{provider}::{model}::{memory_revision}::{content}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -64,6 +67,23 @@ class CacheService:
         except Exception as exc:
             logger.warning("Cache GET eșuat pentru key=%s: %s", key, exc)
             return None
+
+    async def get_many(self, keys: list[str]) -> dict[str, ChunkAnalysis]:
+        """Returnează toate valorile existente pentru lista de chei (Redis MGET)."""
+        if self._client is None or not keys:
+            return {}
+
+        try:
+            raw_values = await self._client.mget(keys)
+            out: dict[str, ChunkAnalysis] = {}
+            for key, raw in zip(keys, raw_values):
+                if raw is None:
+                    continue
+                out[key] = ChunkAnalysis(**json.loads(raw))
+            return out
+        except Exception as exc:
+            logger.warning("Cache MGET eșuat pentru %d chei: %s", len(keys), exc)
+            return {}
 
     async def set(self, key: str, value: ChunkAnalysis) -> None:
         """Salvează un ChunkAnalysis în cache cu TTL."""
