@@ -43,20 +43,21 @@ export function AnalysisProvider({ children }) {
         const graphResult = await scanCode(fileContent, sid, language);
         setScanResult(graphResult);
       } catch (graphErr) {
-        // Non-critical — continue even if graph scan fails
-        console.warn('Graph scan failed (non-critical):', graphErr);
+        // Critical for this architecture — if graph fails, we can't do anything
+        console.error('Graph scan failed:', graphErr);
+        throw graphErr;
       }
 
-      // 2. Run full AI analysis
-      const result = await analyzeFile(file, language);
-      setAnalysisResult(result);
+      // 2. We no longer run full AI analysis on upload to save costs and avoid rate limits.
+      // The AI will only be called on-demand via the Question Router (Filter -> Answer).
+      setAnalysisResult(null);
     } catch (err) {
       if (err instanceof APIError) {
         setError(`API Error ${err.status}: ${err.message}`);
       } else {
-        setError('Could not reach the backend. Make sure it is running on port 8000.');
+        setError('Could not reach the backend for graph scan.');
       }
-      setAnalysisResult(null);
+      setScanResult(null);
     } finally {
       setIsLoading(false);
     }

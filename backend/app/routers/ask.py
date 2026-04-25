@@ -87,6 +87,7 @@ async def ask_question(
 
     # Dacă e semantic și avem cod, facem fallback la AI
     if answer.answered_by == "ai" and body.code:
+        classified = question_router.classify(question)
         ai_answer = await _ai_fallback(
             question=question,
             code=body.code,
@@ -94,9 +95,12 @@ async def ask_question(
             graph_context=answer.graph_context,
             pipeline=pipeline,
             settings=settings,
+            extracted_symbol=classified.extracted_symbol,
+            dep_graph=dep_graph,
+            session_id=session_id,
         )
         answer.answer = ai_answer
-        answer.ai_cost = 0.01  # estimat per chunk
+        answer.ai_cost = 0.002  # cost redus conform noii arhitecturi
 
     elif answer.answered_by == "ai" and not body.code:
         answer.answer = (
@@ -218,26 +222,58 @@ async def _ai_fallback(
     graph_context: str,
     pipeline: AnalysisPipeline,
     settings: Settings,
+    extracted_symbol: Optional[str] = None,
+    dep_graph: Optional[DependencyGraphService] = None,
+    session_id: Optional[str] = None,
 ) -> str:
     """
     Fallback AI pentru întrebări semantice.
     Folosește graph_context ca enrichment (reduce halucinările).
+    IMPLEMENTARE FILTER (PASUL 02): Extrage doar codul relevant din dependency graph.
     """
     detected_lang = detect_language(code, hint=language)
     chunker = get_chunker(detected_lang)
     chunks = chunker.chunk(code, detected_lang)
-    chunks = split_chunks_by_token_limit(chunks, settings.max_chunk_tokens)
+    
+    relevant_chunks = []
+    
+    # 02 FILTER: Find the route and extract only relevant connected code
+    if extracted_symbol and dep_graph and session_id:
+        snapshot = dep_graph.get_snapshot(session_id)
+        if snapshot:
+            related_symbols = {extracted_symbol}
+            # Add direct callers and callees to the relevant set
+            for e in snapshot.edges:
+                if e.source == extracted_symbol:
+                    related_symbols.add(e.target)
+                elif e.target == extracted_symbol:
+                    related_symbols.add(e.source)
+            
+            # Extract only the chunks that match our related symbols
+            for c in chunks:
+                if any(sym.lower() in c.name.lower() or sym in c.code for sym in related_symbols):
+                    relevant_chunks.append(c)
 
-    if not chunks:
+    # Dacă filtrarea nu a găsit nimic sau nu am avut simbol extras, 
+    # trimitem un fallback minimal (max 2 chunk-uri) pentru a nu face rate limit
+    if not relevant_chunks:
+        chunks = split_chunks_by_token_limit(chunks, settings.max_chunk_tokens)
+        relevant_chunks = chunks[:2]
+    else:
+        # Ne asigurăm că și chunk-urile filtrate respectă limita de tokeni
+        relevant_chunks = split_chunks_by_token_limit(relevant_chunks, settings.max_chunk_tokens)
+        relevant_chunks = relevant_chunks[:3] # Max 3 context windows
+
+    if not relevant_chunks:
         return "Nu am putut identifica structuri de cod pentru analiză."
 
-    # Trimite doar chunk-urile relevante (max 3 pentru cost redus)
-    relevant_chunks = chunks[:3]
+    logger.info(f"02 FILTER: Extracted {len(relevant_chunks)} relevant chunks for AI based on dependency graph.")
 
+    # 03 ANSWER: Ask the Expert (AI receives just the filtered context)
     results = await pipeline.analyze_all(
         relevant_chunks,
         memory_contexts={
-            c.name: f"User question: {question}\n{graph_context}"
+            c.name: f"Context:\nUser question: {question}\n{graph_context}"
             for c in relevant_chunks
         },
     )
@@ -245,12 +281,12 @@ async def _ai_fallback(
     if not results:
         return "Nu am putut genera un răspuns."
 
-    # Combină rezultatele relevante
+    # Combină rezultatele
     parts = []
     for r in results:
         if r.junior_summary:
             parts.append(f"**{r.chunk_name}**: {r.junior_summary}")
         if r.bugs_and_vulnerabilities:
-            parts.append(f"Probleme: {', '.join(r.bugs_and_vulnerabilities[:3])}")
+            parts.append(f"Probleme potențiale: {', '.join(r.bugs_and_vulnerabilities[:3])}")
 
     return "\n\n".join(parts) if parts else "Analiza nu a returnat rezultate relevante."

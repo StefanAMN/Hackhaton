@@ -23,7 +23,7 @@ export default function AskAI() {
       const graphMsg = `🔍 **Graph scan complete** ($0 cost)!\n` +
         `Found ${scanResult.nodes} symbols and ${scanResult.edges} dependency edges.\n` +
         (scanResult.high_impact_symbols?.length > 0
-          ? `\n⚡ High-impact symbols: ${scanResult.high_impact_symbols.map(s => s.name).join(', ')}`
+          ? `\n⚡ High-impact symbols: ${scanResult.high_impact_symbols.map(s => s?.name || 'unknown').join(', ')}`
           : '') +
         `\n\nTry asking impact questions like:\n• "Ce se strică dacă modific [funcție]?"\n• "Cine folosește [funcție]?"\n• "Arată-mi structura codului"`;
 
@@ -40,37 +40,8 @@ export default function AskAI() {
     }
   }, [scanResult]);
 
-  // Show AI analysis result
-  useEffect(() => {
-    if (analysisResult && analysisResult.chunks && analysisResult.chunks.length > 0) {
-      const chunks = analysisResult.chunks;
-      const totalBugs = chunks.reduce((acc, chunk) => acc + chunk.bugs_and_vulnerabilities.length, 0);
-
-      let summaryText = `🤖 **AI analysis complete!** Found ${chunks.length} functions/classes.`;
-      if (totalBugs > 0) {
-        summaryText += ` Identified ${totalBugs} potential bugs/vulnerabilities.`;
-      } else {
-        summaryText += ` The code looks clean with no obvious bugs.`;
-      }
-
-      if (analysisResult.dependency_graph_edges > 0) {
-        summaryText += `\n📊 Dependency graph: ${analysisResult.dependency_graph_edges} edges extracted.`;
-      }
-
-      summaryText += `\n\n**${chunks[0].chunk_name}**: ${chunks[0].junior_summary}`;
-
-      setMessages(prev => [
-        ...prev,
-        {
-          id: Date.now(),
-          role: 'system',
-          text: summaryText,
-          answeredBy: 'ai',
-          contextLines: chunks.length,
-        },
-      ]);
-    }
-  }, [analysisResult]);
+  // Legacy AI analysis result hook removed to prevent rate limits.
+  // AI is now only called on-demand via the askQuestion API.
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -112,25 +83,12 @@ export default function AskAI() {
         },
       ]);
     } catch (err) {
-      // Fallback to local matching if backend is down
+      // Fallback if backend is down
       let reply = "Could not reach the backend. ";
-      if (analysisResult) {
-        const query = userMsg.text.toLowerCase();
-        const matchedChunk = analysisResult.chunks.find(c =>
-          c.chunk_name.toLowerCase().includes(query) ||
-          c.junior_summary.toLowerCase().includes(query)
-        );
-
-        if (matchedChunk) {
-          reply = `**${matchedChunk.chunk_name}**: ${matchedChunk.junior_summary}`;
-          if (matchedChunk.bugs_and_vulnerabilities.length > 0) {
-            reply += `\n\n**Bugs:** ${matchedChunk.bugs_and_vulnerabilities.join(', ')}`;
-          }
-        } else {
-          reply += `Try asking about a specific function from the ${analysisResult.chunks.length} analyzed chunks.`;
-        }
-      } else {
+      if (!scanResult) {
         reply += "Upload and scan code first.";
+      } else {
+        reply += "Backend API is unavailable. Please check if the server is running on port 8000.";
       }
 
       setMessages(prev => [

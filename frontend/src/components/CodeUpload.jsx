@@ -68,7 +68,6 @@ export default function CodeUpload() {
         dropped = item.getAsFile();
       }
     }
-    
     if (dropped) handleFile(dropped);
   }, [handleFile]);
 
