@@ -3,26 +3,51 @@
  *
  * Provides:
  *   - analysisResult : AnalyzeResponse | null  — the latest scan result
- *   - isLoading      : boolean                  — scan in progress
- *   - error          : string | null            — last error message
+ *   - scanResult     : ScanResponse | null     — dependency graph scan result ($0)
+ *   - sessionId      : string                  — current session for graph queries
+ *   - sourceCode     : string                  — the currently loaded source code
+ *   - isLoading      : boolean                 — scan in progress
+ *   - error          : string | null           — last error message
  *   - runAnalysis    : (file, language?) => void — triggers file upload + analysis
+ *   - runGraphScan   : (code, language?) => void — builds dependency graph only ($0)
  *   - clearAnalysis  : () => void               — resets state
  */
 import { createContext, useCallback, useContext, useState } from 'react';
-import { analyzeFile, APIError } from '../api/client';
+import { analyzeFile, scanCode, APIError } from '../api/client';
 
 const AnalysisContext = createContext(null);
 
 export function AnalysisProvider({ children }) {
   const [analysisResult, setAnalysisResult] = useState(null);
+  const [scanResult, setScanResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [sessionId, setSessionId] = useState('default');
+  const [sourceCode, setSourceCode] = useState('');
 
   const runAnalysis = useCallback(async (file, language = 'auto') => {
     setIsLoading(true);
     setError(null);
 
     try {
+      // Read the file content for graph scan
+      const fileContent = await file.text();
+      setSourceCode(fileContent);
+
+      // Generate session ID from file
+      const sid = `session_${Date.now().toString(36)}`;
+      setSessionId(sid);
+
+      // 1. Build dependency graph first ($0)
+      try {
+        const graphResult = await scanCode(fileContent, sid, language);
+        setScanResult(graphResult);
+      } catch (graphErr) {
+        // Non-critical — continue even if graph scan fails
+        console.warn('Graph scan failed (non-critical):', graphErr);
+      }
+
+      // 2. Run full AI analysis
       const result = await analyzeFile(file, language);
       setAnalysisResult(result);
     } catch (err) {
@@ -37,14 +62,52 @@ export function AnalysisProvider({ children }) {
     }
   }, []);
 
+  /**
+   * Quick scan — builds dependency graph only, no AI. Cost: $0.
+   */
+  const runGraphScan = useCallback(async (code, language = 'auto') => {
+    setIsLoading(true);
+    setError(null);
+    setSourceCode(code);
+
+    const sid = `session_${Date.now().toString(36)}`;
+    setSessionId(sid);
+
+    try {
+      const graphResult = await scanCode(code, sid, language);
+      setScanResult(graphResult);
+    } catch (err) {
+      if (err instanceof APIError) {
+        setError(`Scan Error ${err.status}: ${err.message}`);
+      } else {
+        setError('Could not reach the backend for graph scan.');
+      }
+      setScanResult(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const clearAnalysis = useCallback(() => {
     setAnalysisResult(null);
+    setScanResult(null);
     setError(null);
     setIsLoading(false);
+    setSourceCode('');
   }, []);
 
   return (
-    <AnalysisContext.Provider value={{ analysisResult, isLoading, error, runAnalysis, clearAnalysis }}>
+    <AnalysisContext.Provider value={{
+      analysisResult,
+      scanResult,
+      sessionId,
+      sourceCode,
+      isLoading,
+      error,
+      runAnalysis,
+      runGraphScan,
+      clearAnalysis,
+    }}>
       {children}
     </AnalysisContext.Provider>
   );
@@ -52,7 +115,6 @@ export function AnalysisProvider({ children }) {
 
 /**
  * Hook — use inside any workspace panel to access analysis state.
- * @returns {{ analysisResult, isLoading, error, runAnalysis, clearAnalysis }}
  */
 export function useAnalysis() {
   const ctx = useContext(AnalysisContext);

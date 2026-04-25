@@ -25,7 +25,9 @@ from fastapi.responses import JSONResponse
 from app.core.config import get_settings
 from app.middleware.security import RateLimitMiddleware, SecurityHeadersMiddleware
 from app.routers.analyze import router as analyze_router
+from app.routers.ask import router as ask_router
 from app.services.cache import CacheService
+from app.services.dependency_graph import DependencyGraphService
 from app.services.knowledge_graph import KnowledgeGraphService
 from app.services.pipeline import AnalysisPipeline
 
@@ -65,12 +67,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ── Inițializare singleton-uri ─────────────────────────────────────────
     cache = CacheService(settings)
     knowledge_graph = KnowledgeGraphService(settings)
+    dependency_graph = DependencyGraphService()
     pipeline = AnalysisPipeline(settings, cache)
 
     app.state.cache = cache
     app.state.knowledge_graph = knowledge_graph
+    app.state.dependency_graph = dependency_graph
     app.state.pipeline = pipeline
-    logger.info("✅ CacheService, KnowledgeGraphService și AnalysisPipeline inițializate.")
+    logger.info("✅ CacheService, KnowledgeGraphService, DependencyGraphService și AnalysisPipeline inițializate.")
 
     yield
 
@@ -137,6 +141,7 @@ async def log_requests(request: Request, call_next):
 # ── Routers ───────────────────────────────────────────────────────────────────
 
 app.include_router(analyze_router, prefix="/api/v1")
+app.include_router(ask_router, prefix="/api/v1")
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

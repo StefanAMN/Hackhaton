@@ -57,6 +57,83 @@ export async function analyzeCode(code, language = 'auto') {
 }
 
 /**
+ * Scan code and build dependency graph (cost: $0).
+ * Calls POST /api/v1/ask/scan
+ *
+ * @param {string} code       - Source code string
+ * @param {string} sessionId  - Session identifier
+ * @param {string} language   - Language hint
+ * @returns {Promise<ScanResponse>}
+ */
+export async function scanCode(code, sessionId = 'default', language = 'auto') {
+  const response = await fetch(`${BASE_URL}/ask/scan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question: 'scan',
+      session_id: sessionId,
+      code,
+      language,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new APIError(response.status, err.detail || 'Scan failed');
+  }
+
+  return response.json();
+}
+
+/**
+ * Ask a question about the code — graph-first, AI-last.
+ * Calls POST /api/v1/ask/
+ *
+ * @param {string} question   - The question to ask
+ * @param {string} sessionId  - Session identifier
+ * @param {string} code       - Optional code for context
+ * @param {string} language   - Language hint
+ * @returns {Promise<AskResponse>}
+ */
+export async function askQuestion(question, sessionId = 'default', code = '', language = 'auto') {
+  const response = await fetch(`${BASE_URL}/ask/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      question,
+      session_id: sessionId,
+      code,
+      language,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new APIError(response.status, err.detail || 'Ask failed');
+  }
+
+  return response.json();
+}
+
+/**
+ * Get the dependency graph for a session.
+ * Calls GET /api/v1/ask/graph/{sessionId}
+ *
+ * @param {string} sessionId
+ * @returns {Promise<GraphResponse>}
+ */
+export async function getGraph(sessionId = 'default') {
+  const response = await fetch(`${BASE_URL}/ask/graph/${sessionId}`);
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new APIError(response.status, err.detail || 'Graph fetch failed');
+  }
+
+  return response.json();
+}
+
+/**
  * Health check — verify backend is reachable.
  * @returns {Promise<{status: string, version: string, llm_provider: string}>}
  */
@@ -93,4 +170,19 @@ export class APIError extends Error {
  * @property {number}         total_chunks
  * @property {ChunkAnalysis[]} chunks
  * @property {number}         processing_time_ms
+ * @property {number}         dependency_graph_edges
+ * @property {string[]}       high_impact_symbols
  */
+
+/**
+ * @typedef {Object} AskResponse
+ * @property {string}  question
+ * @property {string}  category       - "impact" | "structural" | "semantic"
+ * @property {string}  answered_by    - "graph" ($0) | "ai" (cost)
+ * @property {string}  answer
+ * @property {Object}  details
+ * @property {boolean} graph_context_used
+ * @property {number}  ai_cost_estimated
+ * @property {number}  processing_time_ms
+ */
+

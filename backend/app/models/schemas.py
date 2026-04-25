@@ -100,5 +100,52 @@ class AnalyzeResponse(BaseModel):
         default=0,
         description="Numărul total de noduri din knowledge graph după ingest.",
     )
+    # Dependency graph data (built at scan stage, $0)
+    dependency_graph_edges: int = Field(
+        default=0,
+        description="Numărul de relații de dependență extrase din cod (cost $0).",
+    )
+    high_impact_symbols: list[str] = Field(
+        default_factory=list,
+        description="Simbolurile cu cel mai mare impact (cele mai multe dependenți).",
+    )
     chunks: list[ChunkAnalysis]
+    processing_time_ms: float
+
+
+# ── Ask endpoint models (graph-first, AI-last) ──────────────────────────────
+
+class AskRequest(BaseModel):
+    """Cerere pentru endpoint-ul /ask — graph-first, AI-last."""
+
+    question: str = Field(
+        ...,
+        min_length=3,
+        description="Întrebarea despre cod.",
+        examples=["Ce se strică dacă modific funcția calculate_total?"],
+    )
+    session_id: str = Field(
+        default="default",
+        description="ID-ul sesiunii. Graful este stocat per sesiune.",
+    )
+    code: str = Field(
+        default="",
+        description="Cod sursă opțional. Dacă e furnizat, graful se construiește automat.",
+    )
+    language: str = Field(
+        default="auto",
+        description="Limbajul codului sursă.",
+    )
+
+
+class AskResponse(BaseModel):
+    """Răspunsul endpoint-ului /ask."""
+
+    question: str
+    category: str = Field(description="Categoria întrebării: impact | structural | semantic")
+    answered_by: str = Field(description="Cine a răspuns: 'graph' ($0) sau 'ai' (cost)")
+    answer: str
+    details: dict | None = Field(default=None, description="Detalii suplimentare (impact score, dependenți etc.)")
+    graph_context_used: bool = Field(default=False, description="True dacă s-a folosit context din graf.")
+    ai_cost_estimated: float = Field(default=0.0, description="Costul AI estimat ($0 dacă answered_by=graph).")
     processing_time_ms: float

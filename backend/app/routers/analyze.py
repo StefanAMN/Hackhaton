@@ -19,6 +19,7 @@ from app.core.config import Settings, get_settings
 from app.models.schemas import AnalyzeRequest, AnalyzeResponse, SupportedLanguage
 from app.services.cache import CacheService
 from app.services.chunker import detect_language, get_chunker, split_chunks_by_token_limit
+from app.services.dependency_graph import DependencyGraphService
 from app.services.knowledge_graph import KnowledgeGraphService
 from app.services.pipeline import AnalysisPipeline
 from app.services.prefilter import PrefilterService
@@ -44,6 +45,11 @@ def get_knowledge_graph(request: Request) -> KnowledgeGraphService:
     return request.app.state.knowledge_graph
 
 
+def get_dep_graph(request: Request) -> DependencyGraphService:
+    """Extrage DependencyGraphService singleton din app.state (creat la startup)."""
+    return request.app.state.dependency_graph
+
+
 # ── Endpoint 1: JSON body ─────────────────────────────────────────────────────
 
 @router.post(
@@ -59,6 +65,7 @@ async def analyze_json(
     body: AnalyzeRequest,
     pipeline: Annotated[AnalysisPipeline, Depends(get_pipeline)],
     knowledge_graph: Annotated[KnowledgeGraphService, Depends(get_knowledge_graph)],
+    dep_graph: Annotated[DependencyGraphService, Depends(get_dep_graph)],
     settings: Annotated[Settings, Depends(get_settings)],
     include_source: Optional[bool] = Query(
         default=None,
@@ -77,6 +84,7 @@ async def analyze_json(
         language_hint=body.language,
         pipeline=pipeline,
         knowledge_graph=knowledge_graph,
+        dep_graph=dep_graph,
         settings=settings,
         use_prefilter=resolved_prefilter,
         include_source=resolved_include_source,
@@ -94,6 +102,7 @@ async def analyze_json(
 async def analyze_file(
     pipeline: Annotated[AnalysisPipeline, Depends(get_pipeline)],
     knowledge_graph: Annotated[KnowledgeGraphService, Depends(get_knowledge_graph)],
+    dep_graph: Annotated[DependencyGraphService, Depends(get_dep_graph)],
     settings: Annotated[Settings, Depends(get_settings)],
     file: UploadFile = File(..., description="Fișierul sursă de analizat."),
     language: Optional[str] = Form(default="auto"),
@@ -138,6 +147,7 @@ async def analyze_file(
         language_hint=lang_hint,
         pipeline=pipeline,
         knowledge_graph=knowledge_graph,
+        dep_graph=dep_graph,
         settings=settings,
         use_prefilter=resolved_prefilter,
         include_source=resolved_include_source,
@@ -162,6 +172,7 @@ async def _run_analysis(
     language_hint: SupportedLanguage,
     pipeline: AnalysisPipeline,
     knowledge_graph: KnowledgeGraphService,
+    dep_graph: DependencyGraphService,
     settings: Settings,
     use_prefilter: bool = False,
     include_source: bool = False,
@@ -205,6 +216,27 @@ async def _run_analysis(
     memory_boosted_chunks = 0
     memory_revision = 0
     memory_nodes_total = 0
+    dep_graph_edges = 0
+    high_impact_symbols: list[str] = []
+
+    # 2b. Dependency graph (cost $0 — regex only)
+    import hashlib
+    session_id = hashlib.sha256(code.encode()).hexdigest()[:16]
+    try:
+        snapshot = dep_graph.build_from_chunks(session_id, chunks, code)
+        dep_graph_edges = len(snapshot.edges)
+        summary = dep_graph.get_summary(session_id)
+        high_impact_symbols = [
+            s["name"]
+            for s in summary.get("high_impact_symbols", [])
+        ]
+        logger.info(
+            "Dependency graph: %d edges, %d high-impact symbols",
+            dep_graph_edges,
+            len(high_impact_symbols),
+        )
+    except Exception as e:
+        logger.warning("Dependency graph extraction failed (non-critical): %s", e)
 
     if settings.knowledge_graph_enabled:
         memory_contexts = await knowledge_graph.build_memory_context(
@@ -285,4 +317,6 @@ async def _run_analysis(
         memory_nodes_total=memory_nodes_total,
         chunks=chunk_results,
         processing_time_ms=round(elapsed_ms, 2),
+        dependency_graph_edges=dep_graph_edges,
+        high_impact_symbols=high_impact_symbols,
     )

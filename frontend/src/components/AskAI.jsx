@@ -1,42 +1,73 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAnalysis } from '../context/AnalysisContext';
+import { askQuestion, APIError } from '../api/client';
 
 export default function AskAI() {
-  const { analysisResult } = useAnalysis();
+  const { analysisResult, scanResult, sessionId, sourceCode } = useAnalysis();
   const [messages, setMessages] = useState([
     {
       id: 1,
       role: 'system',
-      text: 'CodeLens AI is ready. Upload and scan your code, then ask me anything about the codebase.',
+      text: 'CodeLens is ready. Upload and scan your code, then ask me anything about the codebase.',
+      answeredBy: null,
     },
   ]);
   const [input, setInput] = useState('');
+  const [isAsking, setIsAsking] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Automatically add a message when analysis is complete
+  // Show scan result when graph is built
+  useEffect(() => {
+    if (scanResult) {
+      const graphMsg = `🔍 **Graph scan complete** ($0 cost)!\n` +
+        `Found ${scanResult.nodes} symbols and ${scanResult.edges} dependency edges.\n` +
+        (scanResult.high_impact_symbols?.length > 0
+          ? `\n⚡ High-impact symbols: ${scanResult.high_impact_symbols.map(s => s.name).join(', ')}`
+          : '') +
+        `\n\nTry asking impact questions like:\n• "Ce se strică dacă modific [funcție]?"\n• "Cine folosește [funcție]?"\n• "Arată-mi structura codului"`;
+
+      setMessages(prev => [
+        ...prev.filter(m => m.id === 1),
+        {
+          id: Date.now(),
+          role: 'system',
+          text: graphMsg,
+          answeredBy: 'graph',
+          costSaved: true,
+        },
+      ]);
+    }
+  }, [scanResult]);
+
+  // Show AI analysis result
   useEffect(() => {
     if (analysisResult && analysisResult.chunks && analysisResult.chunks.length > 0) {
       const chunks = analysisResult.chunks;
       const totalBugs = chunks.reduce((acc, chunk) => acc + chunk.bugs_and_vulnerabilities.length, 0);
-      
-      let summaryText = `Analysis complete! I found ${chunks.length} functions/classes.`;
+
+      let summaryText = `🤖 **AI analysis complete!** Found ${chunks.length} functions/classes.`;
       if (totalBugs > 0) {
-         summaryText += ` I also identified ${totalBugs} potential bugs/vulnerabilities.`;
+        summaryText += ` Identified ${totalBugs} potential bugs/vulnerabilities.`;
       } else {
-         summaryText += ` The code looks pretty clean with no obvious bugs.`;
+        summaryText += ` The code looks clean with no obvious bugs.`;
       }
-      
-      summaryText += `\n\nHere is a quick summary of the first component (${chunks[0].chunk_name}): ${chunks[0].junior_summary}`;
+
+      if (analysisResult.dependency_graph_edges > 0) {
+        summaryText += `\n📊 Dependency graph: ${analysisResult.dependency_graph_edges} edges extracted.`;
+      }
+
+      summaryText += `\n\n**${chunks[0].chunk_name}**: ${chunks[0].junior_summary}`;
 
       setMessages(prev => [
-        ...prev.filter(m => m.id === 1), // Keep the initial greeting
+        ...prev,
         {
           id: Date.now(),
           role: 'system',
           text: summaryText,
+          answeredBy: 'ai',
           contextLines: chunks.length,
-        }
+        },
       ]);
     }
   }, [analysisResult]);
@@ -45,8 +76,8 @@ export default function AskAI() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
+  const handleSend = async () => {
+    if (!input.trim() || isAsking) return;
 
     const userMsg = {
       id: Date.now(),
@@ -54,45 +85,66 @@ export default function AskAI() {
       text: input.trim(),
     };
 
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages(prev => [...prev, userMsg]);
     setInput('');
+    setIsAsking(true);
 
-    // If we have analysis result, try to answer based on it
-    setTimeout(() => {
-      let reply = "I haven't analyzed any code yet. Please upload and scan a file first.";
-      let contextLines = 0;
+    try {
+      // Try the graph-first /ask endpoint
+      const response = await askQuestion(
+        userMsg.text,
+        sessionId,
+        sourceCode,
+        'auto',
+      );
 
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          role: 'system',
+          text: response.answer,
+          answeredBy: response.answered_by,
+          category: response.category,
+          costSaved: response.answered_by === 'graph',
+          processingTime: response.processing_time_ms,
+          details: response.details,
+        },
+      ]);
+    } catch (err) {
+      // Fallback to local matching if backend is down
+      let reply = "Could not reach the backend. ";
       if (analysisResult) {
-        // Very basic local keyword matching against chunks
         const query = userMsg.text.toLowerCase();
-        const matchedChunk = analysisResult.chunks.find(c => 
-          c.chunk_name.toLowerCase().includes(query) || 
-          c.junior_summary.toLowerCase().includes(query) ||
-          c.source_code.toLowerCase().includes(query)
+        const matchedChunk = analysisResult.chunks.find(c =>
+          c.chunk_name.toLowerCase().includes(query) ||
+          c.junior_summary.toLowerCase().includes(query)
         );
 
         if (matchedChunk) {
-          reply = `Based on the code for \`${matchedChunk.chunk_name}\`:\n\n${matchedChunk.junior_summary}\n\n`;
+          reply = `**${matchedChunk.chunk_name}**: ${matchedChunk.junior_summary}`;
           if (matchedChunk.bugs_and_vulnerabilities.length > 0) {
-            reply += `**Note on Bugs:**\n- ${matchedChunk.bugs_and_vulnerabilities.join('\n- ')}`;
+            reply += `\n\n**Bugs:** ${matchedChunk.bugs_and_vulnerabilities.join(', ')}`;
           }
-          contextLines = matchedChunk.source_code.split('\n').length;
         } else {
-           reply = `I couldn't find a specific answer for that in the ${analysisResult.chunks.length} chunks analyzed. Try asking about a specific function name.`;
-           contextLines = analysisResult.chunks.length;
+          reply += `Try asking about a specific function from the ${analysisResult.chunks.length} analyzed chunks.`;
         }
+      } else {
+        reply += "Upload and scan code first.";
       }
 
-      setMessages((prev) => [
+      setMessages(prev => [
         ...prev,
         {
           id: Date.now() + 1,
           role: 'system',
           text: reply,
-          contextLines,
+          answeredBy: 'local',
         },
       ]);
-    }, 800);
+    } finally {
+      setIsAsking(false);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -102,6 +154,39 @@ export default function AskAI() {
     }
   };
 
+  const getSourceBadge = (msg) => {
+    if (!msg.answeredBy) return null;
+
+    const badges = {
+      graph: { text: '⚡ Graph ($0)', color: 'var(--accent-emerald)', bg: 'rgba(52, 211, 153, 0.1)' },
+      ai: { text: '🤖 AI', color: 'var(--accent-purple)', bg: 'rgba(168, 85, 247, 0.1)' },
+      local: { text: '💻 Local', color: 'var(--accent-amber)', bg: 'rgba(255, 159, 67, 0.1)' },
+    };
+
+    const badge = badges[msg.answeredBy];
+    if (!badge) return null;
+
+    return (
+      <span style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px',
+        padding: '2px 8px',
+        borderRadius: '12px',
+        fontSize: '10px',
+        fontFamily: 'var(--font-mono)',
+        color: badge.color,
+        background: badge.bg,
+        border: `1px solid ${badge.color}33`,
+      }}>
+        {badge.text}
+        {msg.processingTime && (
+          <span style={{ opacity: 0.7 }}>• {msg.processingTime.toFixed(0)}ms</span>
+        )}
+      </span>
+    );
+  };
+
   return (
     <div className="workspace-panel" id="ask-ai-panel">
       <div className="panel-header">
@@ -109,10 +194,10 @@ export default function AskAI() {
           <div className="panel-header-icon" style={{ background: 'var(--accent-purple-dim)', border: '1px solid rgba(168,85,247,0.2)' }}>
             🤖
           </div>
-          <span className="panel-header-title">Ask AI</span>
+          <span className="panel-header-title">Ask CodeLens</span>
         </div>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--accent-emerald)' }}>
-          context-aware
+          graph-first • ai-last
         </span>
       </div>
       <div className="panel-body">
@@ -128,14 +213,45 @@ export default function AskAI() {
                 transition={{ duration: 0.3 }}
               >
                 <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
-                {msg.contextLines !== undefined && msg.contextLines > 0 && (
-                  <div className="ai-context-badge">
-                    📐 {msg.contextLines} items analyzed
-                  </div>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                  {getSourceBadge(msg)}
+                  {msg.costSaved && (
+                    <span style={{
+                      fontSize: '10px',
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--accent-emerald)',
+                      opacity: 0.8,
+                    }}>
+                      💰 $0 cost
+                    </span>
+                  )}
+                  {msg.category && (
+                    <span style={{
+                      fontSize: '9px',
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--text-muted)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                    }}>
+                      {msg.category}
+                    </span>
+                  )}
+                </div>
               </motion.div>
             ))}
           </AnimatePresence>
+
+          {isAsking && (
+            <motion.div
+              className="ai-message system"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--accent-cyan)' }}
+            >
+              <span className="loading-dots">⚙ Thinking</span>
+            </motion.div>
+          )}
+
           <div ref={messagesEndRef} />
         </div>
 
@@ -143,14 +259,20 @@ export default function AskAI() {
           <input
             type="text"
             className="ai-input"
-            placeholder="Ask about your codebase..."
+            placeholder={scanResult ? "Ask about impact, dependencies..." : "Upload code first..."}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            disabled={isAsking}
             id="ai-question-input"
           />
-          <button className="ai-send-btn" onClick={handleSend} id="ai-send-btn">
-            Send
+          <button
+            className="ai-send-btn"
+            onClick={handleSend}
+            disabled={isAsking || !input.trim()}
+            id="ai-send-btn"
+          >
+            {isAsking ? '...' : 'Send'}
           </button>
         </div>
       </div>
