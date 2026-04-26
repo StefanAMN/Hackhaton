@@ -211,6 +211,8 @@ function buildLayout(nodes, edges, w, h) {
 export default function GlobalMemoryGraph() {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
+  const scrollLockRef = useRef(false);
+  const savedOverflowRef = useRef({ html: '', body: '' });
   const stateRef  = useRef({ nodes: [], edges: [], nodeMap: {}, pan: { x: 0, y: 0 }, zoom: 1, dragging: null, lastMouse: null, hoveredId: null, animFrame: null });
   const [info, setInfo]       = useState({ count: 0, edges: 0, bridgeCount: 0, density: 0, components: 0, topKinds: [] });
   const [loading, setLoading] = useState(true);
@@ -585,31 +587,44 @@ export default function GlobalMemoryGraph() {
   const onWheel = useCallback(e => {
     e.preventDefault();
     e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
     const factor = e.deltaY < 0 ? 1.12 : 0.89;
     stateRef.current.zoom = Math.max(0.2, Math.min(5, stateRef.current.zoom * factor));
   }, []);
 
+  const setPageScrollLock = useCallback((locked) => {
+    if (scrollLockRef.current === locked) return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    if (!html || !body) return;
+
+    if (locked) {
+      savedOverflowRef.current = {
+        html: html.style.overflow,
+        body: body.style.overflow,
+      };
+      html.style.overflow = 'hidden';
+      body.style.overflow = 'hidden';
+    } else {
+      html.style.overflow = savedOverflowRef.current.html;
+      body.style.overflow = savedOverflowRef.current.body;
+    }
+
+    scrollLockRef.current = locked;
+  }, []);
+
+  const onContainerEnter = useCallback(() => {
+    setPageScrollLock(true);
+  }, [setPageScrollLock]);
+
+  const onContainerLeave = useCallback(() => {
+    setPageScrollLock(false);
+  }, [setPageScrollLock]);
+
   useEffect(() => {
-    const handleWheelCapture = (e) => {
-      const container = containerRef.current;
-      if (!container) return;
-
-      const rect = container.getBoundingClientRect();
-      const inside =
-        e.clientX >= rect.left &&
-        e.clientX <= rect.right &&
-        e.clientY >= rect.top &&
-        e.clientY <= rect.bottom;
-
-      if (!inside) return;
-      onWheel(e);
-    };
-
-    window.addEventListener('wheel', handleWheelCapture, { passive: false, capture: true });
-    return () => {
-      window.removeEventListener('wheel', handleWheelCapture, true);
-    };
-  }, [onWheel]);
+    return () => setPageScrollLock(false);
+  }, [setPageScrollLock]);
 
   const resetView = useCallback(() => {
     stateRef.current.pan  = { x: 0, y: 0 };
@@ -653,6 +668,9 @@ export default function GlobalMemoryGraph() {
   return (
     <div
       ref={containerRef}
+      onMouseEnter={onContainerEnter}
+      onMouseLeave={onContainerLeave}
+      onWheelCapture={onWheel}
       style={{
       position: 'relative',
       width: '100%',
