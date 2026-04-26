@@ -817,6 +817,72 @@ export default function GlobalMemoryGraph() {
         </div>
       </div>
 
+      {/* Always-visible zoom controls */}
+      <div style={{
+        position: 'absolute',
+        left: 16,
+        bottom: 14,
+        zIndex: 14,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: 8,
+        borderRadius: 12,
+        background: 'rgba(7,12,24,0.82)',
+        border: '1px solid rgba(255,255,255,0.14)',
+        boxShadow: '0 8px 28px rgba(0,0,0,0.4)',
+        backdropFilter: 'blur(8px)',
+      }}>
+        <button
+          onClick={onZoomOut}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 8,
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            color: '#e8ebff',
+            cursor: 'pointer',
+            fontSize: 18,
+            fontWeight: 700,
+            lineHeight: '30px',
+          }}
+          title="Zoom Out"
+          aria-label="Zoom Out"
+        >
+          -
+        </button>
+        <button
+          onClick={onZoomIn}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 8,
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            color: '#e8ebff',
+            cursor: 'pointer',
+            fontSize: 18,
+            fontWeight: 700,
+            lineHeight: '30px',
+          }}
+          title="Zoom In"
+          aria-label="Zoom In"
+        >
+          +
+        </button>
+        <span style={{
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: 0.6,
+          color: 'rgba(220,229,255,0.88)',
+          textTransform: 'uppercase',
+          userSelect: 'none',
+        }}>
+          Zoom
+        </span>
+      </div>
+
       {/* Controls hint */}
       <div style={{
         position: 'absolute', bottom: 12, right: 16, zIndex: 10,
