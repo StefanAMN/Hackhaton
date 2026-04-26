@@ -89,6 +89,16 @@ export default function GlobalMemoryGraph() {
   const [error, setError]     = useState(null);
   const [empty, setEmpty]     = useState(false);
 
+  const syncCanvasSize = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const W = canvas.offsetWidth || canvas.clientWidth || canvas.parentElement?.clientWidth || 1200;
+    const H = canvas.offsetHeight || canvas.clientHeight || canvas.parentElement?.clientHeight || 700;
+    if (canvas.width !== W) canvas.width = W;
+    if (canvas.height !== H) canvas.height = H;
+    return { W, H };
+  }, []);
+
   /* ── draw loop ── */
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -255,13 +265,9 @@ export default function GlobalMemoryGraph() {
 
       if (rawNodes.length === 0) { setEmpty(true); setLoading(false); return; }
 
-      const canvas = canvasRef.current;
-      const W = canvas ? canvas.offsetWidth : 1200;
-      const H = canvas ? canvas.offsetHeight : 700;
-      if (canvas) {
-        canvas.width = W;
-        canvas.height = H;
-      }
+      const size = syncCanvasSize();
+      const W = size?.W || 1200;
+      const H = size?.H || 700;
 
       // Centre layout on canvas midpoint
       const nodeMap = buildLayout(rawNodes, rawEdges, W, H);
@@ -273,27 +279,21 @@ export default function GlobalMemoryGraph() {
 
       setInfo({ count: rawNodes.length, edges: rawEdges.length });
       setLoading(false);
-
-      if (stateRef.current.animFrame) cancelAnimationFrame(stateRef.current.animFrame);
-
-      const startDrawWhenReady = (triesLeft = 4) => {
-        if (!mounted) return;
-        const nextCanvas = canvasRef.current;
-        if (!nextCanvas) {
-          if (triesLeft > 0) requestAnimationFrame(() => startDrawWhenReady(triesLeft - 1));
-          return;
-        }
-        nextCanvas.width = nextCanvas.offsetWidth || W;
-        nextCanvas.height = nextCanvas.offsetHeight || H;
-        draw();
-      };
-
-      requestAnimationFrame(() => startDrawWhenReady());
     }).catch(err => {
       if (mounted) { setError(err.message); setLoading(false); }
     });
     return () => { mounted = false; };
-  }, [draw]);
+  }, [syncCanvasSize]);
+
+  useEffect(() => {
+    if (loading || error || empty) return;
+    const raf = requestAnimationFrame(() => {
+      syncCanvasSize();
+      if (stateRef.current.animFrame) cancelAnimationFrame(stateRef.current.animFrame);
+      draw();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [loading, error, empty, draw, syncCanvasSize]);
 
   /* ── cleanup animation on unmount ── */
   useEffect(() => {
@@ -303,6 +303,7 @@ export default function GlobalMemoryGraph() {
   /* ── pointer events ── */
   const worldCoords = useCallback((cx, cy) => {
     const canvas = canvasRef.current;
+    if (!canvas) return { wx: cx, wy: cy };
     const { pan, zoom } = stateRef.current;
     const W = canvas.width, H = canvas.height;
     return {
@@ -320,7 +321,9 @@ export default function GlobalMemoryGraph() {
   }, []);
 
   const onMouseMove = useCallback(e => {
-    const r = canvasRef.current.getBoundingClientRect();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const r = canvas.getBoundingClientRect();
     const cx = e.clientX - r.left;
     const cy = e.clientY - r.top;
 
@@ -329,25 +332,29 @@ export default function GlobalMemoryGraph() {
       stateRef.current.pan.x += cx - last.x;
       stateRef.current.pan.y += cy - last.y;
       stateRef.current.lastMouse = { x: cx, y: cy };
-      canvasRef.current.style.cursor = 'grabbing';
+      canvas.style.cursor = 'grabbing';
     } else {
       const { wx, wy } = worldCoords(cx, cy);
       const hit = hitTest(wx, wy);
       stateRef.current.hoveredId = hit ? hit.id : null;
-      canvasRef.current.style.cursor = hit ? 'pointer' : 'default';
+      canvas.style.cursor = hit ? 'pointer' : 'default';
     }
   }, [worldCoords, hitTest]);
 
   const onMouseDown = useCallback(e => {
-    const r = canvasRef.current.getBoundingClientRect();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const r = canvas.getBoundingClientRect();
     stateRef.current.dragging = true;
     stateRef.current.lastMouse = { x: e.clientX - r.left, y: e.clientY - r.top };
   }, []);
 
   const onMouseUp = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     stateRef.current.dragging = false;
     stateRef.current.lastMouse = null;
-    canvasRef.current.style.cursor = stateRef.current.hoveredId ? 'pointer' : 'default';
+    canvas.style.cursor = stateRef.current.hoveredId ? 'pointer' : 'default';
   }, []);
 
   const onWheel = useCallback(e => {
@@ -366,12 +373,12 @@ export default function GlobalMemoryGraph() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ro = new ResizeObserver(() => {
-      canvas.width  = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
+      syncCanvasSize();
     });
     ro.observe(canvas);
+    syncCanvasSize();
     return () => ro.disconnect();
-  }, []);
+  }, [syncCanvasSize]);
 
   /* ── render ── */
   if (loading) return (
