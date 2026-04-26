@@ -44,7 +44,10 @@ export default function AskAI() {
   // AI is now only called on-demand via the askQuestion API.
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const parent = messagesEndRef.current?.parentElement;
+    if (parent) {
+      parent.scrollTop = parent.scrollHeight;
+    }
   }, [messages]);
 
   const handleSend = async () => {

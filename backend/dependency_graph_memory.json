@@ -1,0 +1,252 @@
+{
+  "nodes": {
+    "def calculate_discount(price: float, discount_pct: float) -> float:": {
+      "name": "def calculate_discount(price: float, discount_pct: float) -> float:",
+      "kind": "function",
+      "language": "python",
+      "start_line": 25,
+      "end_line": 30,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "class ShoppingCart:": {
+      "name": "class ShoppingCart:",
+      "kind": "class",
+      "language": "python",
+      "start_line": 31,
+      "end_line": 39,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "def mock_cache() -> CacheService:": {
+      "name": "def mock_cache() -> CacheService:",
+      "kind": "function",
+      "language": "python",
+      "start_line": 66,
+      "end_line": 74,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "def mock_pipeline(mock_cache) -> AnalysisPipeline:": {
+      "name": "def mock_pipeline(mock_cache) -> AnalysisPipeline:",
+      "kind": "function",
+      "language": "python",
+      "start_line": 78,
+      "end_line": 85,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "def mock_knowledge_graph() -> KnowledgeGraphService:": {
+      "name": "def mock_knowledge_graph() -> KnowledgeGraphService:",
+      "kind": "function",
+      "language": "python",
+      "start_line": 87,
+      "end_line": 108,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def client(mock_pipeline, mock_cache, mock_knowledge_graph):": {
+      "name": "async def client(mock_pipeline, mock_cache, mock_knowledge_graph):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 112,
+      "end_line": 136,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def raw_client():": {
+      "name": "async def raw_client():",
+      "kind": "function",
+      "language": "python",
+      "start_line": 140,
+      "end_line": 163,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_analyze_json_success(client):": {
+      "name": "async def test_analyze_json_success(client):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 14,
+      "end_line": 28,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_analyze_json_chunk_structure(client):": {
+      "name": "async def test_analyze_json_chunk_structure(client):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 29,
+      "end_line": 47,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_analyze_json_auto_language_detection(client):": {
+      "name": "async def test_analyze_json_auto_language_detection(client):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 48,
+      "end_line": 58,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_analyze_too_short_code(client):": {
+      "name": "async def test_analyze_too_short_code(client):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 59,
+      "end_line": 67,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_analyze_missing_code_field(client):": {
+      "name": "async def test_analyze_missing_code_field(client):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 68,
+      "end_line": 76,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_analyze_invalid_language(client):": {
+      "name": "async def test_analyze_invalid_language(client):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 77,
+      "end_line": 85,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_health_check(raw_client):": {
+      "name": "async def test_health_check(raw_client):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 88,
+      "end_line": 97,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_memory_stats_endpoint(client):": {
+      "name": "async def test_memory_stats_endpoint(client):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 98,
+      "end_line": 105,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_security_headers_present(raw_client):": {
+      "name": "async def test_security_headers_present(raw_client):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 108,
+      "end_line": 125,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_hsts_header(raw_client):": {
+      "name": "async def test_hsts_header(raw_client):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 126,
+      "end_line": 133,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_analyze_file_upload(client):": {
+      "name": "async def test_analyze_file_upload(client):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 136,
+      "end_line": 151,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_analyze_file_upload_invalid_encoding(client):": {
+      "name": "async def test_analyze_file_upload_invalid_encoding(client):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 152,
+      "end_line": 163,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "__module__": {
+      "name": "__module__",
+      "kind": "unknown",
+      "language": "python",
+      "start_line": 1,
+      "end_line": 1,
+      "in_degree": 0,
+      "out_degree": 6
+    },
+    "def generate_random_name():": {
+      "name": "def generate_random_name():",
+      "kind": "function",
+      "language": "python",
+      "start_line": 4,
+      "end_line": 8,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "def generate_random_email(name):": {
+      "name": "def generate_random_email(name):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 9,
+      "end_line": 13,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "def generate_password(length=12):": {
+      "name": "def generate_password(length=12):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 14,
+      "end_line": 17,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "def main():": {
+      "name": "def main():",
+      "kind": "function",
+      "language": "python",
+      "start_line": 18,
+      "end_line": 30,
+      "in_degree": 0,
+      "out_degree": 0
+    }
+  },
+  "edges": [
+    {
+      "source": "__module__",
+      "target": "mock import AsyncMock",
+      "relation": "imports"
+    },
+    {
+      "source": "__module__",
+      "target": "MagicMock\n\nfrom httpx import AsyncClient",
+      "relation": "imports"
+    },
+    {
+      "source": "__module__",
+      "target": "pipeline import AnalysisPipeline",
+      "relation": "imports"
+    },
+    {
+      "source": "__module__",
+      "target": "conftest import SAMPLE_PYTHON_CODE",
+      "relation": "imports"
+    },
+    {
+      "source": "__module__",
+      "target": "MOCK_CHUNK_ANALYSIS",
+      "relation": "imports"
+    },
+    {
+      "source": "__module__",
+      "target": "random\nimport string\n\ndef generate_random_name",
+      "relation": "imports"
+    }
+  ]
+}

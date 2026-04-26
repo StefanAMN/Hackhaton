@@ -23,6 +23,10 @@ export default function GraphView() {
   const animFrameRef = useRef(null);
   const hoveredNodeRef = useRef(null);
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
+  const zoomRef = useRef(1);
+  const panRef = useRef({ x: 0, y: 0 });
+  const isDraggingRef = useRef(false);
+  const lastMousePosRef = useRef({ x: 0, y: 0 });
   const { analysisResult, scanResult, isLoading } = useAnalysis();
 
   const showGraph = (!!scanResult || !!analysisResult) && !isLoading;
@@ -51,7 +55,7 @@ export default function GraphView() {
       // REAL dependency graph from /ask/scan
       nodeList = graphData.symbols.map((sym, idx) => {
         const angle = (idx / graphData.symbols.length) * Math.PI * 2;
-        const radiusDist = 0.28 + (sym.kind === 'class' ? -0.05 : 0.02);
+        const radiusDist = 0.40 + (sym.kind === 'class' ? -0.05 : 0.02);
         const x = 0.5 + Math.cos(angle) * radiusDist;
         const y = 0.5 + Math.sin(angle) * radiusDist;
 
@@ -100,8 +104,8 @@ export default function GraphView() {
       // Fallback to chunks
       nodeList = chunks.map((chunk, idx) => {
         const angle = (idx / chunks.length) * Math.PI * 2;
-        const x = 0.5 + Math.cos(angle) * 0.3;
-        const y = 0.5 + Math.sin(angle) * 0.3;
+        const x = 0.5 + Math.cos(angle) * 0.40;
+        const y = 0.5 + Math.sin(angle) * 0.40;
         return {
           id: chunk.chunk_id,
           label: chunk.chunk_name,
@@ -137,6 +141,12 @@ export default function GraphView() {
 
     const draw = () => {
       ctx.clearRect(0, 0, w, h);
+      ctx.save();
+      const currentZoom = zoomRef.current;
+      const currentPan = panRef.current;
+      ctx.translate(w/2 + currentPan.x, h/2 + currentPan.y);
+      ctx.scale(currentZoom, currentZoom);
+      ctx.translate(-w/2, -h/2);
       animProgress = Math.min(animProgress + 0.015, 1);
 
       const nodes = nodesRef.current;
@@ -235,34 +245,44 @@ export default function GraphView() {
 
         // Label
         ctx.fillStyle = isDimmed ? 'rgba(255,255,255,0.15)' : colors.text;
-        ctx.font = `${isHovered ? 12 : 11}px "JetBrains Mono", monospace`;
+        ctx.font = `${isHovered ? 16 : 13}px "JetBrains Mono", monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
         let displayLabel = n.label || 'unknown';
-        if (displayLabel.length > 14) {
-          displayLabel = displayLabel.substring(0, 11) + '...';
+        if (displayLabel.length > 20) {
+          displayLabel = displayLabel.substring(0, 17) + '...';
         }
         ctx.fillText(displayLabel, n.px, n.py);
 
         // Kind badge below node
         if (isHovered) {
-          ctx.font = '9px "Space Grotesk", sans-serif';
+          ctx.font = '11px "Space Grotesk", sans-serif';
           ctx.fillStyle = 'rgba(255,255,255,0.5)';
           const kindText = n.kind || 'unknown';
-          ctx.fillText(kindText + (n.inDegree > 0 ? ` • ${n.inDegree} deps` : ''), n.px, n.py + n.radius + 14);
+          ctx.fillText(kindText + (n.inDegree > 0 ? ` • ${n.inDegree} deps` : ''), n.px, n.py + n.radius + 18);
         }
 
         ctx.globalAlpha = 1;
       });
 
+      ctx.restore();
       animFrameRef.current = requestAnimationFrame(draw);
     };
 
     const handleMouseMove = (e) => {
       const canvasRect = canvas.getBoundingClientRect();
-      const mx = e.clientX - canvasRect.left;
-      const my = e.clientY - canvasRect.top;
+      const currentZoom = zoomRef.current;
+      const currentPan = panRef.current;
+      
+      if (isDraggingRef.current) {
+        panRef.current.x += (e.clientX - lastMousePosRef.current.x);
+        panRef.current.y += (e.clientY - lastMousePosRef.current.y);
+        lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+      }
+
+      const mx = (e.clientX - canvasRect.left - w/2 - currentPan.x) / currentZoom + w/2;
+      const my = (e.clientY - canvasRect.top - h/2 - currentPan.y) / currentZoom + h/2;
 
       const found = nodesRef.current.find(n => {
         const dx = mx - n.px;
@@ -275,15 +295,35 @@ export default function GraphView() {
         hoveredNodeRef.current = newId;
         setHoveredNodeId(newId);
       }
-      canvas.style.cursor = found ? 'pointer' : 'default';
+      
+      if (!isDraggingRef.current) {
+        canvas.style.cursor = found ? 'pointer' : 'default';
+      }
+    };
+
+    const handleMouseDown = (e) => {
+      isDraggingRef.current = true;
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+      canvas.style.cursor = 'grabbing';
+    };
+
+    const handleMouseUp = () => {
+      isDraggingRef.current = false;
+      canvas.style.cursor = hoveredNodeRef.current ? 'pointer' : 'default';
     };
 
     canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mousedown', handleMouseDown);
+    canvas.addEventListener('mouseup', handleMouseUp);
+    canvas.addEventListener('mouseleave', handleMouseUp);
     draw();
 
     return () => {
       cancelAnimationFrame(animFrameRef.current);
       canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mousedown', handleMouseDown);
+      canvas.removeEventListener('mouseup', handleMouseUp);
+      canvas.removeEventListener('mouseleave', handleMouseUp);
     };
     // NOTE: hoveredNode is NOT in the dependency array — it is read from
     // hoveredNodeRef inside the animation loop to avoid tearing down the
@@ -346,9 +386,9 @@ export default function GraphView() {
               ))}
             </div>
           )}
-          <button className="graph-control-btn" id="graph-zoom-in">+ Zoom</button>
-          <button className="graph-control-btn" id="graph-zoom-out">- Zoom</button>
-          <button className="graph-control-btn" id="graph-reset">Reset</button>
+          <button className="graph-control-btn" id="graph-zoom-in" onClick={() => { zoomRef.current *= 1.2; }}>+ Zoom</button>
+          <button className="graph-control-btn" id="graph-zoom-out" onClick={() => { zoomRef.current /= 1.2; }}>- Zoom</button>
+          <button className="graph-control-btn" id="graph-reset" onClick={() => { zoomRef.current = 1; panRef.current = { x: 0, y: 0 }; }}>Reset</button>
         </div>
       </div>
     </div>
