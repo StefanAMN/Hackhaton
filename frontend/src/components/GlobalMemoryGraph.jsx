@@ -604,6 +604,25 @@ export default function GlobalMemoryGraph() {
     applyZoom(0.89);
   }, [applyZoom]);
 
+  useEffect(() => {
+    const handleZoomIn = () => onZoomIn();
+    const handleZoomOut = () => onZoomOut();
+    const handleReset = () => {
+      stateRef.current.pan = { x: 0, y: 0 };
+      stateRef.current.zoom = 1;
+    };
+
+    window.addEventListener('gmg:zoom-in', handleZoomIn);
+    window.addEventListener('gmg:zoom-out', handleZoomOut);
+    window.addEventListener('gmg:reset', handleReset);
+
+    return () => {
+      window.removeEventListener('gmg:zoom-in', handleZoomIn);
+      window.removeEventListener('gmg:zoom-out', handleZoomOut);
+      window.removeEventListener('gmg:reset', handleReset);
+    };
+  }, [onZoomIn, onZoomOut]);
+
   const setPageScrollLock = useCallback((locked) => {
     if (scrollLockRef.current === locked) return;
 

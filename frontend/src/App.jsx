@@ -86,6 +86,11 @@ function CTASection() {
 export default function App() {
   const [view, setView] = useState('workspace');
 
+  const triggerGlobalGraphControl = (eventName) => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new Event(eventName));
+  };
+
   return (
     <>
       <Particles />
@@ -113,9 +118,18 @@ export default function App() {
         ) : (
           <section className="workspace" style={{ paddingTop: '100px', minHeight: '100vh' }}>
             <div className="workspace-inner">
-               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '2rem' }}>
+               <div style={{ display: 'flex', justifyContent: 'center', gap: '0.75rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
                   <button className="btn btn-ghost btn-lg" onClick={() => setView('workspace')}>
                     ← Back to Workspace
+                  </button>
+                  <button className="btn btn-ghost btn-lg" onClick={() => triggerGlobalGraphControl('gmg:zoom-out')}>
+                    − Zoom Out
+                  </button>
+                  <button className="btn btn-primary btn-lg" onClick={() => triggerGlobalGraphControl('gmg:zoom-in')}>
+                    + Zoom In
+                  </button>
+                  <button className="btn btn-ghost btn-lg" onClick={() => triggerGlobalGraphControl('gmg:reset')}>
+                    Reset Graph View
                   </button>
               </div>
               <div style={{ width: '100%', maxWidth: 1400, margin: '0 auto' }}>
