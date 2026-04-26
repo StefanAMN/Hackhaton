@@ -258,8 +258,10 @@ export default function GlobalMemoryGraph() {
       const canvas = canvasRef.current;
       const W = canvas ? canvas.offsetWidth : 1200;
       const H = canvas ? canvas.offsetHeight : 700;
-      canvas.width  = W;
-      canvas.height = H;
+      if (canvas) {
+        canvas.width = W;
+        canvas.height = H;
+      }
 
       // Centre layout on canvas midpoint
       const nodeMap = buildLayout(rawNodes, rawEdges, W, H);
@@ -273,7 +275,20 @@ export default function GlobalMemoryGraph() {
       setLoading(false);
 
       if (stateRef.current.animFrame) cancelAnimationFrame(stateRef.current.animFrame);
-      draw();
+
+      const startDrawWhenReady = (triesLeft = 4) => {
+        if (!mounted) return;
+        const nextCanvas = canvasRef.current;
+        if (!nextCanvas) {
+          if (triesLeft > 0) requestAnimationFrame(() => startDrawWhenReady(triesLeft - 1));
+          return;
+        }
+        nextCanvas.width = nextCanvas.offsetWidth || W;
+        nextCanvas.height = nextCanvas.offsetHeight || H;
+        draw();
+      };
+
+      requestAnimationFrame(() => startDrawWhenReady());
     }).catch(err => {
       if (mounted) { setError(err.message); setLoading(false); }
     });
