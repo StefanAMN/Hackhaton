@@ -269,6 +269,33 @@
       "end_line": 69,
       "in_degree": 0,
       "out_degree": 0
+    },
+    "def nr_aparitii(L, x):": {
+      "name": "def nr_aparitii(L, x):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 3,
+      "end_line": 27,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "def mediana(l1, st1, dr1, l2, st2, dr2):": {
+      "name": "def mediana(l1, st1, dr1, l2, st2, dr2):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 31,
+      "end_line": 39,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "def perechi(l, suma, st, dr):": {
+      "name": "def perechi(l, suma, st, dr):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 44,
+      "end_line": 52,
+      "in_degree": 0,
+      "out_degree": 0
     }
   },
   "edges": [
