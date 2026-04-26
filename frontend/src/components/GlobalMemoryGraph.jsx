@@ -584,13 +584,25 @@ export default function GlobalMemoryGraph() {
     canvas.style.cursor = stateRef.current.hoveredId ? 'pointer' : 'default';
   }, []);
 
+  const applyZoom = useCallback((factor) => {
+    stateRef.current.zoom = Math.max(0.2, Math.min(5, stateRef.current.zoom * factor));
+  }, []);
+
   const onWheel = useCallback(e => {
     e.preventDefault();
     e.stopPropagation();
     if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
     const factor = e.deltaY < 0 ? 1.12 : 0.89;
-    stateRef.current.zoom = Math.max(0.2, Math.min(5, stateRef.current.zoom * factor));
-  }, []);
+    applyZoom(factor);
+  }, [applyZoom]);
+
+  const onZoomIn = useCallback(() => {
+    applyZoom(1.12);
+  }, [applyZoom]);
+
+  const onZoomOut = useCallback(() => {
+    applyZoom(0.89);
+  }, [applyZoom]);
 
   const setPageScrollLock = useCallback((locked) => {
     if (scrollLockRef.current === locked) return;
@@ -713,6 +725,22 @@ export default function GlobalMemoryGraph() {
           <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#cdd6ff', padding: '5px 12px', background: 'rgba(64,117,255,0.16)', borderRadius: 10, border: '1px solid rgba(150,190,255,0.2)' }}>
             {info.count} nodes · {info.edges} links
           </span>
+          <button
+            onClick={onZoomOut}
+            style={{ padding: '5px 10px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, color: '#e8ebff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+            title="Zoom Out"
+            aria-label="Zoom Out"
+          >
+            -
+          </button>
+          <button
+            onClick={onZoomIn}
+            style={{ padding: '5px 10px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, color: '#e8ebff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+            title="Zoom In"
+            aria-label="Zoom In"
+          >
+            +
+          </button>
           <button
             onClick={resetView}
             style={{ padding: '5px 12px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, color: '#e8ebff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
