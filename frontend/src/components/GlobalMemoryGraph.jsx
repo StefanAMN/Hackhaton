@@ -1,331 +1,452 @@
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import ForceGraph2D from 'react-force-graph-2d';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { getGlobalGraph } from '../api/client';
 
-// Cute, soft pastel neon colors
-const NODE_COLORS = {
-  function: { core: '#ff9a9e', glow: 'rgba(255, 154, 158, 0.3)' }, // Soft pink
-  class: { core: '#a18cd1', glow: 'rgba(161, 140, 209, 0.3)' },   // Soft purple
-  method: { core: '#8fd3f4', glow: 'rgba(143, 211, 244, 0.3)' },   // Soft blue
-  module: { core: '#fbc2eb', glow: 'rgba(251, 194, 235, 0.3)' },   // Soft magenta
-  unknown: { core: '#cfd9df', glow: 'rgba(207, 217, 223, 0.3)' },  // Soft grey
+const NODE_PALETTE = {
+  function: { fill: 'rgba(255,154,158,0.18)', stroke: '#ff9a9e', text: '#ffbfc2' },
+  class:    { fill: 'rgba(161,140,209,0.18)', stroke: '#a18cd1', text: '#c8b8ff' },
+  method:   { fill: 'rgba(143,211,244,0.18)', stroke: '#8fd3f4', text: '#b5e8ff' },
+  module:   { fill: 'rgba(251,194,235,0.18)', stroke: '#fbc2eb', text: '#ffdaf6' },
+  unknown:  { fill: 'rgba(180,180,200,0.12)', stroke: '#aaa', text: '#ccc' },
 };
 
-const EDGE_COLORS = {
-  calls: '#ff9a9e',
-  imports: '#fbc2eb',
+const EDGE_PALETTE = {
+  calls:    '#ff9a9e',
+  imports:  '#fbc2eb',
   inherits: '#a18cd1',
 };
 
-export default function GlobalMemoryGraph() {
-  const [graphData, setGraphData] = useState({ nodes: [], links: [] });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  
-  // Interactive state
-  const [hoverNode, setHoverNode] = useState(null);
-  const [hoverLink, setHoverLink] = useState(null);
+const NODE_R = 38;          // base radius
+const REPULSION = 28000;    // repulsion constant
+const ATTRACT = 0.003;      // spring constant
+const REST_LEN = 260;       // ideal edge length
+const DAMPING = 0.78;       // velocity damping
+const ITERATIONS = 200;     // pre-bake iterations before first draw
 
-  const graphRef = useRef();
+function buildLayout(nodes, edges, w, h) {
+  // Random initial positions spread across canvas
+  nodes.forEach((n, i) => {
+    const angle = (i / nodes.length) * Math.PI * 2;
+    const r = Math.min(w, h) * 0.35;
+    n.x = w / 2 + Math.cos(angle) * r + (Math.random() - 0.5) * 60;
+    n.y = h / 2 + Math.sin(angle) * r + (Math.random() - 0.5) * 60;
+    n.vx = 0;
+    n.vy = 0;
+  });
 
-  useEffect(() => {
-    let mounted = true;
+  const nodeMap = {};
+  nodes.forEach(n => { nodeMap[n.id] = n; });
 
-    async function fetchData() {
-      try {
-        setIsLoading(true);
-        const data = await getGlobalGraph();
-        if (!mounted) return;
-        
-        const nodesArray = Object.keys(data.nodes || {}).map(nodeId => {
-          const n = data.nodes[nodeId];
-          return {
-            id: nodeId,
-            name: n.name,
-            kind: n.kind,
-            val: Math.max(1, (n.in_degree || 0) + 1),
-          };
-        });
-
-        const linksArray = (data.edges || []).map(e => ({
-          source: e.source,
-          target: e.target,
-          relation: e.relation,
-        }));
-
-        setGraphData({ nodes: nodesArray, links: linksArray });
-      } catch (err) {
-        if (mounted) setError(err.message);
-      } finally {
-        if (mounted) setIsLoading(false);
+  // Pre-bake physics
+  for (let iter = 0; iter < ITERATIONS; iter++) {
+    // Repulsion between all pairs
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], b = nodes[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist2 = dx * dx + dy * dy + 1;
+        const dist = Math.sqrt(dist2);
+        const force = REPULSION / dist2;
+        const fx = (dx / dist) * force;
+        const fy = (dy / dist) * force;
+        a.vx -= fx; a.vy -= fy;
+        b.vx += fx; b.vy += fy;
       }
     }
 
-    fetchData();
-    return () => { mounted = false; };
-  }, []);
-
-  // Configure physics engine for less clutter, more "bouncy" cute feel
-  useEffect(() => {
-    if (graphRef.current && graphData.nodes.length > 0) {
-      graphRef.current.d3Force('charge').strength(-300); // Spread nodes
-      graphRef.current.d3Force('link').distance(80);     // Comfortable distance
-    }
-  }, [graphData]);
-
-  const handleNodeClick = useCallback(node => {
-    const distance = 40;
-    const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z || 0);
-
-    graphRef.current?.centerAt(node.x, node.y, 1000);
-    graphRef.current?.zoom(8, 2000);
-  }, [graphRef]);
-
-  const hoverNeighbors = useMemo(() => {
-    if (!hoverNode) return new Set();
-    const neighbors = new Set();
-    graphData.links.forEach(link => {
-      const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-      const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-      if (sourceId === hoverNode.id) neighbors.add(targetId);
-      if (targetId === hoverNode.id) neighbors.add(sourceId);
+    // Spring attraction along edges
+    edges.forEach(e => {
+      const a = nodeMap[e.from];
+      const b = nodeMap[e.to];
+      if (!a || !b) return;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const stretch = dist - REST_LEN;
+      const fx = dx / dist * stretch * ATTRACT * 300;
+      const fy = dy / dist * stretch * ATTRACT * 300;
+      a.vx += fx; a.vy += fy;
+      b.vx -= fx; b.vy -= fy;
     });
-    return neighbors;
-  }, [hoverNode, graphData.links]);
 
-  const paintNode = useCallback((node, ctx, globalScale) => {
-    if (node.x === undefined || node.y === undefined) return;
+    // Integrate + damp
+    nodes.forEach(n => {
+      n.vx *= DAMPING;
+      n.vy *= DAMPING;
+      n.x += n.vx;
+      n.y += n.vy;
+    });
+  }
 
-    const isHovered = hoverNode === node;
-    const isNeighbor = hoverNeighbors.has(node.id);
-    const isDimmed = hoverNode && !isHovered && !isNeighbor;
-    
-    const colors = NODE_COLORS[node.kind] || NODE_COLORS.unknown;
-    
-    // Size based on degree, but keep it plump and cute
-    const baseRadius = 5 + Math.sqrt(node.val || 1) * 1.2;
-    const radius = isHovered ? baseRadius * 1.2 : baseRadius;
+  return nodeMap;
+}
 
-    ctx.globalAlpha = isDimmed ? 0.2 : 1;
+export default function GlobalMemoryGraph() {
+  const canvasRef = useRef(null);
+  const stateRef  = useRef({ nodes: [], edges: [], nodeMap: {}, pan: { x: 0, y: 0 }, zoom: 1, dragging: null, lastMouse: null, hoveredId: null, animFrame: null });
+  const [info, setInfo]       = useState({ count: 0, edges: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState(null);
+  const [empty, setEmpty]     = useState(false);
 
-    // Soft outer glow
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, radius * 1.8, 0, 2 * Math.PI, false);
-    ctx.fillStyle = colors.glow;
-    ctx.fill();
+  /* ── draw loop ── */
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const { nodes, edges, nodeMap, pan, zoom, hoveredId } = stateRef.current;
+    const W = canvas.width, H = canvas.height;
 
-    // Solid cute pastel core
-    ctx.beginPath();
-    ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
-    ctx.fillStyle = colors.core;
-    ctx.fill();
-    
-    // Thick white outline for that sticker/cute effect
-    ctx.lineWidth = isHovered ? 2.5 / globalScale : 1.5 / globalScale;
-    ctx.strokeStyle = '#ffffff';
-    ctx.stroke();
+    ctx.clearRect(0, 0, W, H);
 
-    // Cute node icon inside
-    const iconMap = { function: '♥', class: '✿', method: '✦', module: '★', unknown: '?' };
-    ctx.fillStyle = '#ffffff'; 
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = `bold ${radius * 1.1}px Inter, sans-serif`;
-    ctx.fillText(iconMap[node.kind] || iconMap.unknown, node.x, node.y);
-
-    // --- Draw Node Label underneath with cute pill ---
-    const label = node.name || 'unknown';
-    const fontSize = isHovered ? 14 / globalScale : 11 / globalScale;
-    ctx.font = `bold ${fontSize}px Inter, sans-serif`;
-    const textWidth = ctx.measureText(label).width;
-    const paddingX = 6 / globalScale;
-    const paddingY = 3 / globalScale;
-    const bckgDimensions = [textWidth, fontSize].map(n => n + paddingX * 2); 
-    
-    const labelY = node.y + radius * 1.8 + paddingY;
-
-    // Pill background
-    ctx.fillStyle = isHovered ? colors.core : 'rgba(30, 30, 46, 0.9)'; 
-    const rectX = node.x - bckgDimensions[0] / 2;
-    const rectY = labelY - bckgDimensions[1] / 2;
-    
-    // Round pill using arc for left and right edges (since roundRect might crash)
-    const pillRadius = bckgDimensions[1] / 2;
-    ctx.beginPath();
-    ctx.arc(rectX + pillRadius, labelY, pillRadius, Math.PI / 2, Math.PI * 1.5);
-    ctx.lineTo(rectX + bckgDimensions[0] - pillRadius, rectY);
-    ctx.arc(rectX + bckgDimensions[0] - pillRadius, labelY, pillRadius, Math.PI * 1.5, Math.PI / 2);
-    ctx.closePath();
-    ctx.fill();
-    
-    // Border for pill
-    ctx.strokeStyle = isHovered ? '#ffffff' : colors.core;
-    ctx.lineWidth = 1 / globalScale;
-    ctx.stroke();
-
-    // Text
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(label, node.x, labelY);
-
-    ctx.globalAlpha = 1;
-  }, [hoverNode, hoverNeighbors]);
-
-  // RESTORED: Custom edge drawing so we can have cute edge labels back!
-  const paintLink = useCallback((link, ctx, globalScale) => {
-    const start = link.source;
-    const end = link.target;
-
-    if (!start.x || !start.y || !end.x || !end.y) return;
-
-    const isHovered = hoverLink === link || 
-                      (hoverNode && (start.id === hoverNode.id || end.id === hoverNode.id));
-    const isDimmed = (hoverNode || hoverLink) && !isHovered;
-
-    ctx.globalAlpha = isDimmed ? 0.15 : (isHovered ? 1 : 0.6);
-    const color = EDGE_COLORS[link.relation] || '#ffffff';
-
-    // --- Draw edge label in the middle ---
-    const midX = start.x + (end.x - start.x) / 2;
-    const midY = start.y + (end.y - start.y) / 2;
-    
-    let angle = Math.atan2(end.y - start.y, end.x - start.x);
-    if (angle > Math.PI / 2 || angle < -Math.PI / 2) {
-      angle += Math.PI;
-    }
+    // Background
+    ctx.fillStyle = '#13131f';
+    ctx.fillRect(0, 0, W, H);
 
     ctx.save();
-    ctx.translate(midX, midY);
-    ctx.rotate(angle);
+    ctx.translate(W / 2 + pan.x, H / 2 + pan.y);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-W / 2, -H / 2);
 
-    const label = link.relation || 'linked';
-    const fontSize = isHovered ? 9 / globalScale : 7 / globalScale;
-    ctx.font = `bold ${fontSize}px Inter, sans-serif`;
-    const textWidth = ctx.measureText(label).width;
-    const paddingX = 4 / globalScale;
-    const paddingY = 2 / globalScale;
+    // Draw edges first
+    edges.forEach(e => {
+      const a = nodeMap[e.from];
+      const b = nodeMap[e.to];
+      if (!a || !b) return;
 
-    const boxW = textWidth + paddingX * 2;
-    const boxH = fontSize + paddingY * 2;
-    const rX = -boxW / 2;
-    const rY = -boxH / 2;
+      const isHov = hoveredId === a.id || hoveredId === b.id;
+      const color = EDGE_PALETTE[e.relation] || '#888';
+      ctx.globalAlpha = isHov ? 0.95 : (hoveredId ? 0.12 : 0.45);
 
-    // Cute pill for edge label
-    ctx.fillStyle = 'rgba(30, 30, 46, 0.9)';
-    const pillRadius = boxH / 2;
-    ctx.beginPath();
-    ctx.arc(rX + pillRadius, 0, pillRadius, Math.PI / 2, Math.PI * 1.5);
-    ctx.lineTo(rX + boxW - pillRadius, rY);
-    ctx.arc(rX + boxW - pillRadius, 0, pillRadius, Math.PI * 1.5, Math.PI / 2);
-    ctx.closePath();
-    ctx.fill();
-    
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1 / globalScale;
-    ctx.stroke();
+      // Line
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = isHov ? color : '#aaaacc';
+      ctx.lineWidth = isHov ? 2 : 1.2;
+      ctx.stroke();
 
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = isHovered ? color : '#e5e7eb';
-    ctx.fillText(label, 0, 0);
+      // Arrowhead at ~80% towards b (stops before node edge)
+      const t = 0.78;
+      const ax = a.x + (b.x - a.x) * t;
+      const ay = a.y + (b.y - a.y) * t;
+      const angle = Math.atan2(b.y - a.y, b.x - a.x);
+      const aLen = isHov ? 14 : 9;
 
-    ctx.restore();
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - aLen * Math.cos(angle - 0.38), ay - aLen * Math.sin(angle - 0.38));
+      ctx.lineTo(ax - aLen * Math.cos(angle + 0.38), ay - aLen * Math.sin(angle + 0.38));
+      ctx.closePath();
+      ctx.fillStyle = isHov ? color : '#aaaacc';
+      ctx.fill();
+
+      // Edge label at midpoint
+      if (isHov && e.relation) {
+        const mx = (a.x + b.x) / 2;
+        const my = (a.y + b.y) / 2;
+        ctx.globalAlpha = 1;
+        ctx.font = 'bold 11px Inter, sans-serif';
+        const tw = ctx.measureText(e.relation).width + 10;
+        const th = 16;
+        ctx.fillStyle = 'rgba(20,20,40,0.88)';
+        ctx.beginPath();
+        ctx.roundRect(mx - tw / 2, my - th / 2, tw, th, 6);
+        ctx.fill();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(e.relation, mx, my);
+      }
+    });
+
     ctx.globalAlpha = 1;
-  }, [hoverNode, hoverLink]);
 
-  if (isLoading) {
-    return (
-      <div className="workspace-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <p>Loading memory graph...</p>
-      </div>
-    );
-  }
+    // Draw nodes
+    nodes.forEach(n => {
+      const colors = NODE_PALETTE[n.kind] || NODE_PALETTE.unknown;
+      const isHov = hoveredId === n.id;
+      const isDim = hoveredId && !isHov;
+      ctx.globalAlpha = isDim ? 0.18 : 1;
 
-  if (error) {
-    return (
-      <div className="workspace-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'red' }}>
-        <p>Error: {error}</p>
-      </div>
-    );
-  }
+      const r = NODE_R + (isHov ? 6 : 0);
 
-  if (graphData.nodes.length === 0) {
-    return (
-      <div className="workspace-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <div className="graph-placeholder">
-          <div className="graph-placeholder-icon">🕸️</div>
-          <p>Global memory graph is empty. Upload some code to start building it!</p>
-        </div>
+      // Outer glow
+      if (isHov) {
+        const grad = ctx.createRadialGradient(n.x, n.y, r * 0.5, n.x, n.y, r * 2);
+        grad.addColorStop(0, colors.stroke + '44');
+        grad.addColorStop(1, 'transparent');
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r * 2, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+      }
+
+      // Fill
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = colors.fill;
+      ctx.fill();
+
+      // Border
+      ctx.strokeStyle = colors.stroke;
+      ctx.lineWidth = isHov ? 2.5 : 1.5;
+      ctx.stroke();
+
+      // Label — always show full name, wrap if needed
+      ctx.globalAlpha = isDim ? 0.18 : 1;
+      const label = n.label || n.id || 'unknown';
+      const fontSize = isHov ? 13 : 11;
+      ctx.font = `bold ${fontSize}px "JetBrains Mono", monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Word-wrap by character width
+      const maxW = r * 2 - 8;
+      let display = label;
+      if (ctx.measureText(label).width > maxW) {
+        // Find break point
+        let cut = label.length;
+        while (cut > 1 && ctx.measureText(label.slice(0, cut) + '…').width > maxW) cut--;
+        display = label.slice(0, cut) + '…';
+      }
+
+      // Draw text with subtle shadow for readability
+      ctx.shadowColor = 'rgba(0,0,0,0.8)';
+      ctx.shadowBlur = 4;
+      ctx.fillStyle = colors.text;
+      ctx.fillText(display, n.x, n.y);
+      ctx.shadowBlur = 0;
+
+      // Kind tag below node
+      ctx.font = `10px Inter, sans-serif`;
+      ctx.fillStyle = colors.stroke;
+      ctx.globalAlpha = isDim ? 0.1 : (isHov ? 0.9 : 0.55);
+      ctx.fillText(n.kind, n.x, n.y + r + 13);
+    });
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    stateRef.current.animFrame = requestAnimationFrame(draw);
+  }, []);
+
+  /* ── load data ── */
+  useEffect(() => {
+    let mounted = true;
+    getGlobalGraph().then(data => {
+      if (!mounted) return;
+
+      const rawNodes = Object.keys(data.nodes || {}).map(id => ({
+        id,
+        label: data.nodes[id].name || id,
+        kind: data.nodes[id].kind || 'unknown',
+        x: 0, y: 0, vx: 0, vy: 0,
+      }));
+
+      const rawEdges = (data.edges || []).map(e => ({
+        from: e.source,
+        to: e.target,
+        relation: e.relation,
+      }));
+
+      if (rawNodes.length === 0) { setEmpty(true); setLoading(false); return; }
+
+      const canvas = canvasRef.current;
+      const W = canvas ? canvas.offsetWidth : 1200;
+      const H = canvas ? canvas.offsetHeight : 700;
+      canvas.width  = W;
+      canvas.height = H;
+
+      // Centre layout on canvas midpoint
+      const nodeMap = buildLayout(rawNodes, rawEdges, W, H);
+      stateRef.current.nodes   = rawNodes;
+      stateRef.current.edges   = rawEdges;
+      stateRef.current.nodeMap = nodeMap;
+      stateRef.current.pan     = { x: 0, y: 0 };
+      stateRef.current.zoom    = 1;
+
+      setInfo({ count: rawNodes.length, edges: rawEdges.length });
+      setLoading(false);
+
+      if (stateRef.current.animFrame) cancelAnimationFrame(stateRef.current.animFrame);
+      draw();
+    }).catch(err => {
+      if (mounted) { setError(err.message); setLoading(false); }
+    });
+    return () => { mounted = false; };
+  }, [draw]);
+
+  /* ── cleanup animation on unmount ── */
+  useEffect(() => {
+    return () => { if (stateRef.current.animFrame) cancelAnimationFrame(stateRef.current.animFrame); };
+  }, []);
+
+  /* ── pointer events ── */
+  const worldCoords = useCallback((cx, cy) => {
+    const canvas = canvasRef.current;
+    const { pan, zoom } = stateRef.current;
+    const W = canvas.width, H = canvas.height;
+    return {
+      wx: (cx - W / 2 - pan.x) / zoom + W / 2,
+      wy: (cy - H / 2 - pan.y) / zoom + H / 2,
+    };
+  }, []);
+
+  const hitTest = useCallback((wx, wy) => {
+    const { nodes } = stateRef.current;
+    return nodes.find(n => {
+      const dx = wx - n.x, dy = wy - n.y;
+      return Math.hypot(dx, dy) <= NODE_R + 6;
+    }) || null;
+  }, []);
+
+  const onMouseMove = useCallback(e => {
+    const r = canvasRef.current.getBoundingClientRect();
+    const cx = e.clientX - r.left;
+    const cy = e.clientY - r.top;
+
+    if (stateRef.current.dragging) {
+      const last = stateRef.current.lastMouse;
+      stateRef.current.pan.x += cx - last.x;
+      stateRef.current.pan.y += cy - last.y;
+      stateRef.current.lastMouse = { x: cx, y: cy };
+      canvasRef.current.style.cursor = 'grabbing';
+    } else {
+      const { wx, wy } = worldCoords(cx, cy);
+      const hit = hitTest(wx, wy);
+      stateRef.current.hoveredId = hit ? hit.id : null;
+      canvasRef.current.style.cursor = hit ? 'pointer' : 'default';
+    }
+  }, [worldCoords, hitTest]);
+
+  const onMouseDown = useCallback(e => {
+    const r = canvasRef.current.getBoundingClientRect();
+    stateRef.current.dragging = true;
+    stateRef.current.lastMouse = { x: e.clientX - r.left, y: e.clientY - r.top };
+  }, []);
+
+  const onMouseUp = useCallback(() => {
+    stateRef.current.dragging = false;
+    stateRef.current.lastMouse = null;
+    canvasRef.current.style.cursor = stateRef.current.hoveredId ? 'pointer' : 'default';
+  }, []);
+
+  const onWheel = useCallback(e => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.12 : 0.89;
+    stateRef.current.zoom = Math.max(0.2, Math.min(5, stateRef.current.zoom * factor));
+  }, []);
+
+  const resetView = useCallback(() => {
+    stateRef.current.pan  = { x: 0, y: 0 };
+    stateRef.current.zoom = 1;
+  }, []);
+
+  /* ── resize ── */
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ro = new ResizeObserver(() => {
+      canvas.width  = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    });
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, []);
+
+  /* ── render ── */
+  if (loading) return (
+    <div style={center}>
+      <div style={{ color: '#a18cd1', fontFamily: 'monospace', fontSize: 16 }}>⚙ Loading memory graph…</div>
+    </div>
+  );
+
+  if (error) return (
+    <div style={center}>
+      <div style={{ color: '#ff6b6b', fontFamily: 'monospace' }}>⚠ {error}</div>
+    </div>
+  );
+
+  if (empty) return (
+    <div style={center}>
+      <div style={{ textAlign: 'center', color: '#888' }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>🕸️</div>
+        <div>Global memory graph is empty.<br />Upload and scan some code first.</div>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className="workspace-panel" style={{ padding: 0, overflow: 'hidden', height: '700px', display: 'flex', flexDirection: 'column' }}>
-        <div className="panel-header" style={{ position: 'absolute', zIndex: 10, background: 'rgba(30, 30, 46, 0.85)', backdropFilter: 'blur(8px)', width: '100%', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '12px 20px', display: 'flex', justifyContent: 'space-between' }}>
-            <div className="panel-header-left" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <div style={{ fontSize: '18px', fontWeight: 'bold', letterSpacing: '1px', color: '#ff9a9e' }}>CODELENS<span style={{ color: '#fbc2eb' }}>.</span></div>
-                <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '14px', borderLeft: '1px solid rgba(255,255,255,0.2)', paddingLeft: '15px' }}>Global Memory Model</div>
-            </div>
-            
-            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-                 <div style={{ display: 'flex', gap: '8px', padding: '4px 10px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                     {Object.entries(NODE_COLORS).filter(([k]) => k !== 'unknown').map(([kind, color]) => (
-                         <div key={kind} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: color.core, border: '1px solid #fff' }}></div>
-                            <span style={{ fontSize: '11px', color: '#ccc', textTransform: 'uppercase', fontWeight: '600' }}>{kind}</span>
-                         </div>
-                     ))}
-                 </div>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: '#a18cd1', padding: '6px 12px', background: 'rgba(161, 140, 209, 0.1)', borderRadius: '12px', fontWeight: 'bold' }}>
-                   {graphData.nodes.length} nodes • {graphData.links.length} edges
-                </span>
-                <button className="btn btn-ghost" style={{ padding: '6px 10px', minWidth: '0', borderRadius: '12px', background: 'rgba(255,255,255,0.1)' }} onClick={() => graphRef.current?.zoomToFit(400, 50)}>⛶</button>
-            </div>
+    <div style={{ position: 'relative', width: '100%', height: '100%', background: '#13131f', borderRadius: 16, overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '12px 20px',
+        background: 'rgba(20,20,38,0.85)',
+        backdropFilter: 'blur(10px)',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <span style={{ fontWeight: 800, letterSpacing: 1, color: '#ff9a9e', fontSize: 16 }}>
+            CODELENS<span style={{ color: '#fbc2eb' }}>.</span>
+          </span>
+          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, borderLeft: '1px solid rgba(255,255,255,0.15)', paddingLeft: 14 }}>
+            Global Memory Graph
+          </span>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Legend */}
+          <div style={{ display: 'flex', gap: 10, padding: '4px 12px', background: 'rgba(0,0,0,0.25)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)' }}>
+            {Object.entries(NODE_PALETTE).filter(([k]) => k !== 'unknown').map(([kind, c]) => (
+              <div key={kind} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 9, height: 9, borderRadius: '50%', background: c.stroke }} />
+                <span style={{ fontSize: 10, color: '#bbb', textTransform: 'uppercase', fontWeight: 600 }}>{kind}</span>
+              </div>
+            ))}
+          </div>
+          <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#a18cd1', padding: '5px 12px', background: 'rgba(161,140,209,0.1)', borderRadius: 10 }}>
+            {info.count} nodes · {info.edges} edges
+          </span>
+          <button
+            onClick={resetView}
+            style={{ padding: '5px 12px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: '#ccc', cursor: 'pointer', fontSize: 12 }}
+          >
+            ⛶ Reset
+          </button>
+        </div>
+      </div>
 
-      <ForceGraph2D
-        ref={graphRef}
-        graphData={graphData}
-        
-        nodeCanvasObject={paintNode}
-        
-        // Restore edge rendering so we have labels!
-        linkCanvasObject={paintLink}
-        linkCanvasObjectMode={() => 'after'}
-        
-        linkCurvature={0.2}
-        linkColor={link => {
-            const isHovered = hoverLink === link || (hoverNode && (link.source.id === hoverNode.id || link.target.id === hoverNode.id));
-            const isDimmed = (hoverNode || hoverLink) && !isHovered;
-            if (isDimmed) return 'rgba(255,255,255,0.05)';
-            if (isHovered) return '#ffffff'; 
-            return EDGE_COLORS[link.relation] || 'rgba(255,255,255,0.2)';
-        }}
-        linkWidth={link => {
-            const isHovered = hoverLink === link || (hoverNode && (link.source.id === hoverNode.id || link.target.id === hoverNode.id));
-            return isHovered ? 3 : 1.5;
-        }}
-        
-        nodeLabel={() => ''}
-        
-        // Directional arrows
-        linkDirectionalArrowLength={5}
-        linkDirectionalArrowRelPos={1}
-        linkDirectionalArrowColor={link => {
-            const isHovered = hoverLink === link || (hoverNode && (link.source.id === hoverNode.id || link.target.id === hoverNode.id));
-            return isHovered ? '#ffffff' : (EDGE_COLORS[link.relation] || '#fff');
-        }}
-        
-        onNodeClick={handleNodeClick}
-        onNodeHover={setHoverNode}
-        onLinkHover={setHoverLink}
-        
-        backgroundColor="#1e1e2f" // Soft dark purple background
-        width={window.innerWidth > 1200 ? 1200 : window.innerWidth - 40}
-        height={700}
+      {/* Canvas */}
+      <canvas
+        ref={canvasRef}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: 'default', paddingTop: 52 }}
+        onMouseMove={onMouseMove}
+        onMouseDown={onMouseDown}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+        onWheel={onWheel}
       />
+
+      {/* Controls hint */}
+      <div style={{
+        position: 'absolute', bottom: 12, right: 16, zIndex: 10,
+        fontFamily: 'monospace', fontSize: 10, color: 'rgba(255,255,255,0.25)',
+        display: 'flex', gap: 14,
+      }}>
+        <span>Scroll to zoom</span>
+        <span>Drag to pan</span>
+      </div>
     </div>
   );
 }
+
+const center = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  width: '100%', height: '100%', minHeight: 400,
+  background: '#13131f', borderRadius: 16,
+};

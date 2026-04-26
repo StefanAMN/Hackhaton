@@ -178,7 +178,7 @@
       "start_line": 1,
       "end_line": 1,
       "in_degree": 0,
-      "out_degree": 6
+      "out_degree": 8
     },
     "def generate_random_name():": {
       "name": "def generate_random_name():",
@@ -215,6 +215,60 @@
       "end_line": 30,
       "in_degree": 0,
       "out_degree": 0
+    },
+    "def _settings(store_path: str):": {
+      "name": "def _settings(store_path: str):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 14,
+      "end_line": 21,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_knowledge_graph_learns_and_returns_stats(tmp_path):": {
+      "name": "async def test_knowledge_graph_learns_and_returns_stats(tmp_path):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 23,
+      "end_line": 52,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "async def test_knowledge_graph_context_and_boost(tmp_path):": {
+      "name": "async def test_knowledge_graph_context_and_boost(tmp_path):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 54,
+      "end_line": 83,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "def _settings(max_chunks: int = 2, min_score: float = 0.1):": {
+      "name": "def _settings(max_chunks: int = 2, min_score: float = 0.1):",
+      "kind": "function",
+      "language": "python",
+      "start_line": 11,
+      "end_line": 17,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "def test_prefilter_ranks_risky_chunk_higher():": {
+      "name": "def test_prefilter_ranks_risky_chunk_higher():",
+      "kind": "function",
+      "language": "python",
+      "start_line": 18,
+      "end_line": 43,
+      "in_degree": 0,
+      "out_degree": 0
+    },
+    "def test_prefilter_select_limits_to_top_k():": {
+      "name": "def test_prefilter_select_limits_to_top_k():",
+      "kind": "function",
+      "language": "python",
+      "start_line": 44,
+      "end_line": 69,
+      "in_degree": 0,
+      "out_degree": 0
     }
   },
   "edges": [
@@ -246,6 +300,16 @@
     {
       "source": "__module__",
       "target": "random\nimport string\n\ndef generate_random_name",
+      "relation": "imports"
+    },
+    {
+      "source": "__module__",
+      "target": "knowledge_graph import KnowledgeGraphService\n\n\ndef _settings",
+      "relation": "imports"
+    },
+    {
+      "source": "__module__",
+      "target": "prefilter import PrefilterService\n\n\ndef _settings",
       "relation": "imports"
     }
   ]

@@ -250,7 +250,7 @@ export default function GraphView() {
         ctx.textBaseline = 'middle';
 
         let displayLabel = n.label || 'unknown';
-        if (displayLabel.length > 20) {
+        if (!isHovered && displayLabel.length > 20) {
           displayLabel = displayLabel.substring(0, 17) + '...';
         }
         ctx.fillText(displayLabel, n.px, n.py);
@@ -312,10 +312,17 @@ export default function GraphView() {
       canvas.style.cursor = hoveredNodeRef.current ? 'pointer' : 'default';
     };
 
+    const handleWheel = (e) => {
+      e.preventDefault();
+      const zoomAmount = e.deltaY > 0 ? 0.9 : 1.1;
+      zoomRef.current *= zoomAmount;
+    };
+
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('mouseup', handleMouseUp);
     canvas.addEventListener('mouseleave', handleMouseUp);
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
     draw();
 
     return () => {
@@ -324,6 +331,7 @@ export default function GraphView() {
       canvas.removeEventListener('mousedown', handleMouseDown);
       canvas.removeEventListener('mouseup', handleMouseUp);
       canvas.removeEventListener('mouseleave', handleMouseUp);
+      canvas.removeEventListener('wheel', handleWheel);
     };
     // NOTE: hoveredNode is NOT in the dependency array — it is read from
     // hoveredNodeRef inside the animation loop to avoid tearing down the
