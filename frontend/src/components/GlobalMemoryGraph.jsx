@@ -64,6 +64,16 @@ export default function GlobalMemoryGraph() {
     return () => { mounted = false; };
   }, []);
 
+  // Configure physics engine for less clutter
+  useEffect(() => {
+    if (graphRef.current && graphData.nodes.length > 0) {
+      // Repel nodes strongly so they are not clumped
+      graphRef.current.d3Force('charge').strength(-400);
+      // Make edges longer
+      graphRef.current.d3Force('link').distance(100);
+    }
+  }, [graphData]);
+
   const handleNodeClick = useCallback(node => {
     const distance = 40;
     const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z || 0);
@@ -96,17 +106,17 @@ export default function GlobalMemoryGraph() {
     
     const colors = NODE_COLORS[node.kind] || NODE_COLORS.unknown;
     
-    // Size based on degree
-    const baseRadius = 4 + Math.sqrt(node.val || 1);
-    const radius = isHovered ? baseRadius * 1.2 : baseRadius;
+    // Size based on degree (made smaller overall to balance with text)
+    const baseRadius = 2 + Math.sqrt(node.val || 1) * 0.8;
+    const radius = isHovered ? baseRadius * 1.5 : baseRadius;
 
     ctx.globalAlpha = isDimmed ? 0.2 : 1;
 
     // Draw selection box / extra glow if hovered
     if (isHovered) {
       // Like the reference image: a glowing box around the node
-      const boxWidth = radius * 6;
-      const boxHeight = radius * 4;
+      const boxWidth = radius * 8;
+      const boxHeight = radius * 5;
       ctx.strokeStyle = colors.core;
       ctx.lineWidth = 1 / globalScale;
       ctx.strokeRect(node.x - boxWidth/2, node.y - boxHeight/2 - radius, boxWidth, boxHeight);
@@ -118,7 +128,7 @@ export default function GlobalMemoryGraph() {
 
     // Outer glow (neon effect)
     ctx.beginPath();
-    ctx.arc(node.x, node.y, radius * 1.5, 0, 2 * Math.PI, false);
+    ctx.arc(node.x, node.y, radius * 2.5, 0, 2 * Math.PI, false);
     ctx.fillStyle = colors.glow;
     ctx.fill();
 
@@ -126,23 +136,24 @@ export default function GlobalMemoryGraph() {
     ctx.beginPath();
     ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
     
-    // Optional: create gradient for core
+    // Gradient for core
     const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, radius);
     gradient.addColorStop(0, '#ffffff'); // bright center
-    gradient.addColorStop(0.3, colors.core);
+    gradient.addColorStop(0.5, colors.core);
     gradient.addColorStop(1, colors.core);
     
     ctx.fillStyle = gradient;
     ctx.fill();
     
     // Outline
-    ctx.lineWidth = isHovered ? 2 / globalScale : 0.5 / globalScale;
+    ctx.lineWidth = isHovered ? 2 / globalScale : 1 / globalScale;
     ctx.strokeStyle = '#ffffff';
     ctx.stroke();
 
     // --- Draw Node Label underneath ---
     const label = node.name || 'unknown';
-    const fontSize = isHovered ? 14 / globalScale : 10 / globalScale;
+    // Make text larger relative to the circle
+    const fontSize = isHovered ? 14 / globalScale : 12 / globalScale;
     ctx.font = `${fontSize}px Inter, sans-serif`;
     const textWidth = ctx.measureText(label).width;
     const paddingX = 4 / globalScale;
@@ -191,27 +202,18 @@ export default function GlobalMemoryGraph() {
 
 
   const paintLink = useCallback((link, ctx, globalScale) => {
-    // ForceGraph internal link structure modifies source/target to be objects
+    // Only draw the label in linkCanvasObject since we're using mode='after'
     const start = link.source;
     const end = link.target;
 
-    // Ignore if not fully initialized
     if (!start.x || !start.y || !end.x || !end.y) return;
 
     const isHovered = hoverLink === link || 
                       (hoverNode && (start.id === hoverNode.id || end.id === hoverNode.id));
     const isDimmed = (hoverNode || hoverLink) && !isHovered;
 
-    ctx.globalAlpha = isDimmed ? 0.1 : (isHovered ? 1 : 0.4);
-
+    ctx.globalAlpha = isDimmed ? 0.2 : (isHovered ? 1 : 0.8);
     const color = EDGE_COLORS[link.relation] || '#ffffff';
-    
-    ctx.beginPath();
-    ctx.moveTo(start.x, start.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = isHovered ? 2 / globalScale : 0.8 / globalScale;
-    ctx.stroke();
 
     // --- Draw edge label in the middle ---
     const midX = start.x + (end.x - start.x) / 2;
@@ -321,16 +323,35 @@ export default function GlobalMemoryGraph() {
         ref={graphRef}
         graphData={graphData}
         
-        // Custom canvas drawing
+        // Custom canvas drawing for nodes
         nodeCanvasObject={paintNode}
+        
+        // Link rendering
         linkCanvasObject={paintLink}
+        linkCanvasObjectMode={() => 'after'}
+        linkColor={link => {
+            const isHovered = hoverLink === link || (hoverNode && (link.source.id === hoverNode.id || link.target.id === hoverNode.id));
+            const isDimmed = (hoverNode || hoverLink) && !isHovered;
+            if (isDimmed) return 'rgba(255,255,255,0.05)';
+            return EDGE_COLORS[link.relation] || 'rgba(255,255,255,0.2)';
+        }}
+        linkWidth={link => {
+            const isHovered = hoverLink === link || (hoverNode && (link.source.id === hoverNode.id || link.target.id === hoverNode.id));
+            return isHovered ? 2 : 1;
+        }}
         
         // Let the custom painter handle the label so we don't use the default tooltip
         nodeLabel={() => ''}
         
         // Directional arrows
-        linkDirectionalArrowLength={3.5}
+        linkDirectionalArrowLength={4}
         linkDirectionalArrowRelPos={1}
+        linkDirectionalArrowColor={link => {
+            const isHovered = hoverLink === link || (hoverNode && (link.source.id === hoverNode.id || link.target.id === hoverNode.id));
+            const isDimmed = (hoverNode || hoverLink) && !isHovered;
+            if (isDimmed) return 'rgba(255,255,255,0.05)';
+            return EDGE_COLORS[link.relation] || 'rgba(255,255,255,0.2)';
+        }}
         
         // Interaction
         onNodeClick={handleNodeClick}
@@ -341,10 +362,6 @@ export default function GlobalMemoryGraph() {
         backgroundColor="#0B0D14" // Deep dark blue/black like reference
         width={window.innerWidth > 1200 ? 1200 : window.innerWidth - 40}
         height={700}
-        
-        // Physics config
-        d3AlphaDecay={0.02}
-        d3VelocityDecay={0.3}
       />
       
       {/* Fake Minimap on bottom right */}
