@@ -165,6 +165,20 @@ async def memory_stats(
     return await knowledge_graph.get_stats()
 
 
+@router.get(
+    "/global_graph",
+    summary="Graful global de dependențe",
+    description="Returnează snapshot-ul grafului global acumulat în memorie.",
+)
+async def get_global_graph(
+    dep_graph: Annotated[DependencyGraphService, Depends(get_dep_graph)],
+) -> dict:
+    snapshot = dep_graph.get_snapshot()
+    if not snapshot:
+        return {"nodes": {}, "edges": []}
+    return snapshot.to_dict()
+
+
 # ── Core logic (shared) ───────────────────────────────────────────────────────
 
 async def _run_analysis(

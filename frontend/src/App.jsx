@@ -11,6 +11,8 @@ import Particles from './components/Particles';
 import ErrorBoundary from './components/ErrorBoundary';
 import useScrollReveal from './hooks/useScrollReveal';
 import { AnalysisProvider } from './context/AnalysisContext';
+import GlobalMemoryGraph from './components/GlobalMemoryGraph';
+import { useState } from 'react';
 
 function Workspace() {
   const [ref, isVisible] = useScrollReveal({ threshold: 0.05 });
@@ -82,20 +84,44 @@ function CTASection() {
 }
 
 export default function App() {
+  const [view, setView] = useState('workspace');
+
   return (
     <>
       <Particles />
       <Navbar />
       <main>
-        <Hero />
-        <hr className="section-divider" />
-        <HowItWorks />
-        <hr className="section-divider" />
-        <Workspace />
-        <hr className="section-divider" />
-        <Metrics />
-        <hr className="section-divider" />
-        <CTASection />
+        {view === 'workspace' ? (
+          <>
+            <Hero />
+            <hr className="section-divider" />
+            <HowItWorks />
+            <hr className="section-divider" />
+            
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '2rem' }}>
+                <button className="btn btn-primary btn-lg" onClick={() => setView('global_graph')}>
+                  🧠 Explore Global Memory Graph
+                </button>
+            </div>
+
+            <Workspace />
+            <hr className="section-divider" />
+            <Metrics />
+            <hr className="section-divider" />
+            <CTASection />
+          </>
+        ) : (
+          <section className="workspace" style={{ paddingTop: '100px', minHeight: '100vh' }}>
+            <div className="workspace-inner">
+               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '2rem' }}>
+                  <button className="btn btn-ghost btn-lg" onClick={() => setView('workspace')}>
+                    ← Back to Workspace
+                  </button>
+              </div>
+              <GlobalMemoryGraph />
+            </div>
+          </section>
+        )}
       </main>
       <Footer />
     </>

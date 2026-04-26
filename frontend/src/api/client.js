@@ -134,6 +134,21 @@ export async function getGraph(sessionId = 'default') {
 }
 
 /**
+ * Get the global accumulated dependency graph.
+ * Calls GET /api/v1/analyze/global_graph
+ */
+export async function getGlobalGraph() {
+  const response = await fetch(`${BASE_URL}/analyze/global_graph`);
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new APIError(response.status, err.detail || 'Global graph fetch failed');
+  }
+
+  return response.json();
+}
+
+/**
  * Health check — verify backend is reachable.
  * @returns {Promise<{status: string, version: string, llm_provider: string}>}
  */

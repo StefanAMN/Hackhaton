@@ -16,8 +16,12 @@ from __future__ import annotations
 
 import re
 import logging
+import json
+import dataclasses
 from collections import defaultdict
 from dataclasses import dataclass, field
+from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from app.services.chunker import CodeChunk
@@ -59,11 +63,29 @@ class ImpactResult:
 
 @dataclass
 class DependencySnapshot:
-    """Snapshot complet al grafului — stocat per sesiune."""
+    """Snapshot complet al grafului."""
     nodes: dict[str, GraphNode] = field(default_factory=dict)
     edges: list[GraphEdge] = field(default_factory=list)
     adjacency: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     reverse_adj: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "nodes": {k: dataclasses.asdict(v) for k, v in self.nodes.items()},
+            "edges": [dataclasses.asdict(e) for e in self.edges],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "DependencySnapshot":
+        snapshot = cls()
+        for k, v in data.get("nodes", {}).items():
+            snapshot.nodes[k] = GraphNode(**v)
+        for e in data.get("edges", []):
+            edge = GraphEdge(**e)
+            snapshot.edges.append(edge)
+            snapshot.adjacency[edge.source].add(edge.target)
+            snapshot.reverse_adj[edge.target].add(edge.source)
+        return snapshot
 
 
 # ── Regex patterns for dependency extraction ──────────────────────────────────
@@ -112,9 +134,28 @@ class DependencyGraphService:
       - Răspunsuri instant la întrebări de impact
     """
 
-    def __init__(self) -> None:
-        # Stocare per session_id
-        self._sessions: dict[str, DependencySnapshot] = {}
+    def __init__(self, store_path: str = "dependency_graph_memory.json") -> None:
+        self._path = Path(store_path)
+        self._lock = Lock()
+        self._global_snapshot = DependencySnapshot()
+        self._load_from_disk()
+
+    def _load_from_disk(self) -> None:
+        if not self._path.exists():
+            return
+        try:
+            raw = json.loads(self._path.read_text(encoding="utf-8"))
+            self._global_snapshot = DependencySnapshot.from_dict(raw)
+            logger.info("Loaded global dependency graph with %d nodes, %d edges.", len(self._global_snapshot.nodes), len(self._global_snapshot.edges))
+        except Exception as e:
+            logger.error("Failed to load dependency graph from disk: %s", e)
+
+    def _persist(self) -> None:
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._path.write_text(json.dumps(self._global_snapshot.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.error("Failed to save dependency graph to disk: %s", e)
 
     def build_from_chunks(
         self,
@@ -170,18 +211,40 @@ class DependencyGraphService:
             node.out_degree = len(snapshot.adjacency.get(name, set()))
             node.in_degree = len(snapshot.reverse_adj.get(name, set()))
 
-        self._sessions[session_id] = snapshot
+        # 4. Merge into global snapshot
+        with self._lock:
+            for name, node in snapshot.nodes.items():
+                self._global_snapshot.nodes[name] = node
+            
+            # Avoid duplicate edges
+            existing_edges = set((e.source, e.target, e.relation) for e in self._global_snapshot.edges)
+            for edge in snapshot.edges:
+                key = (edge.source, edge.target, edge.relation)
+                if key not in existing_edges:
+                    self._global_snapshot.edges.append(edge)
+                    self._global_snapshot.adjacency[edge.source].add(edge.target)
+                    self._global_snapshot.reverse_adj[edge.target].add(edge.source)
+                    existing_edges.add(key)
+            
+            # Recalculate global degrees
+            for name, node in self._global_snapshot.nodes.items():
+                node.out_degree = len(self._global_snapshot.adjacency.get(name, set()))
+                node.in_degree = len(self._global_snapshot.reverse_adj.get(name, set()))
+            
+            self._persist()
+
         logger.info(
-            "Dependency graph built: %d nodes, %d edges (session=%s)",
+            "Dependency graph built: %d nodes, %d edges (session=%s). Global graph now has %d nodes.",
             len(snapshot.nodes),
             len(snapshot.edges),
             session_id[:8],
+            len(self._global_snapshot.nodes)
         )
         return snapshot
 
-    def get_snapshot(self, session_id: str) -> DependencySnapshot | None:
-        """Returnează snapshot-ul grafului pentru o sesiune."""
-        return self._sessions.get(session_id)
+    def get_snapshot(self, session_id: str = "") -> DependencySnapshot | None:
+        """Returnează snapshot-ul grafului global."""
+        return self._global_snapshot
 
     def get_impact(self, session_id: str, symbol: str) -> ImpactResult:
         """
@@ -189,9 +252,9 @@ class DependencyGraphService:
         Traversare BFS pe reverse_adj (cine depinde de mine).
         Cost: $0, <1ms.
         """
-        snapshot = self._sessions.get(session_id)
-        if not snapshot:
-            return ImpactResult(symbol=symbol, explanation="Nu există graf pentru această sesiune.")
+        snapshot = self._global_snapshot
+        if not snapshot.nodes:
+            return ImpactResult(symbol=symbol, explanation="Nu există date în graf.")
 
         # Normalizare: caută și cu matching parțial
         resolved = self._resolve_symbol(symbol, snapshot)
@@ -246,9 +309,9 @@ class DependencyGraphService:
 
     def get_dependencies(self, session_id: str, symbol: str) -> dict[str, Any]:
         """Ce depinde `symbol` de? (outgoing edges)"""
-        snapshot = self._sessions.get(session_id)
-        if not snapshot:
-            return {"symbol": symbol, "dependencies": [], "explanation": "Nu există graf."}
+        snapshot = self._global_snapshot
+        if not snapshot.nodes:
+            return {"symbol": symbol, "dependencies": [], "explanation": "Nu există date în graf."}
 
         resolved = self._resolve_symbol(symbol, snapshot)
         if not resolved:
@@ -280,9 +343,9 @@ class DependencyGraphService:
 
     def get_callers(self, session_id: str, symbol: str) -> dict[str, Any]:
         """Cine cheamă `symbol`?"""
-        snapshot = self._sessions.get(session_id)
-        if not snapshot:
-            return {"symbol": symbol, "callers": [], "explanation": "Nu există graf."}
+        snapshot = self._global_snapshot
+        if not snapshot.nodes:
+            return {"symbol": symbol, "callers": [], "explanation": "Nu există date în graf."}
 
         resolved = self._resolve_symbol(symbol, snapshot)
         if not resolved:
@@ -299,9 +362,9 @@ class DependencyGraphService:
 
     def get_callees(self, session_id: str, symbol: str) -> dict[str, Any]:
         """Pe cine cheamă `symbol`?"""
-        snapshot = self._sessions.get(session_id)
-        if not snapshot:
-            return {"symbol": symbol, "callees": [], "explanation": "Nu există graf."}
+        snapshot = self._global_snapshot
+        if not snapshot.nodes:
+            return {"symbol": symbol, "callees": [], "explanation": "Nu există date în graf."}
 
         resolved = self._resolve_symbol(symbol, snapshot)
         if not resolved:
@@ -320,11 +383,11 @@ class DependencyGraphService:
 
         return {"symbol": resolved, "callees": callees, "count": len(callees), "explanation": explanation}
 
-    def get_summary(self, session_id: str) -> dict[str, Any]:
-        """Sumar al întregului graf — fără AI."""
-        snapshot = self._sessions.get(session_id)
-        if not snapshot:
-            return {"error": "Nu există graf pentru această sesiune."}
+    def get_summary(self, session_id: str = "") -> dict[str, Any]:
+        """Sumar al întregului graf global — fără AI."""
+        snapshot = self._global_snapshot
+        if not snapshot.nodes:
+            return {"error": "Nu există date în graf."}
 
         # Top noduri după impact (in_degree)
         ranked = sorted(
@@ -358,9 +421,9 @@ class DependencyGraphService:
         """
         Generează o explicație structurală a simbolului — doar din graf, fără AI.
         """
-        snapshot = self._sessions.get(session_id)
-        if not snapshot:
-            return f"Nu există graf pentru a explica '{symbol}'."
+        snapshot = self._global_snapshot
+        if not snapshot.nodes:
+            return f"Nu există date în graf pentru a explica '{symbol}'."
 
         resolved = self._resolve_symbol(symbol, snapshot)
         if not resolved:
@@ -400,8 +463,8 @@ class DependencyGraphService:
         Generează context din graf pentru a îmbogăți promptul AI.
         Folosit când întrebarea e semantică (fallback la AI).
         """
-        snapshot = self._sessions.get(session_id)
-        if not snapshot:
+        snapshot = self._global_snapshot
+        if not snapshot.nodes:
             return ""
 
         resolved = self._resolve_symbol(symbol, snapshot)
