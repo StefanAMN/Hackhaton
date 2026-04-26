@@ -590,12 +590,24 @@ export default function GlobalMemoryGraph() {
   }, []);
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const handleWheelCapture = (e) => {
+      const container = containerRef.current;
+      if (!container) return;
 
-    container.addEventListener('wheel', onWheel, { passive: false });
+      const rect = container.getBoundingClientRect();
+      const inside =
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom;
+
+      if (!inside) return;
+      onWheel(e);
+    };
+
+    window.addEventListener('wheel', handleWheelCapture, { passive: false, capture: true });
     return () => {
-      container.removeEventListener('wheel', onWheel);
+      window.removeEventListener('wheel', handleWheelCapture, true);
     };
   }, [onWheel]);
 
