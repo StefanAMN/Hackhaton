@@ -88,6 +88,8 @@ export default function GlobalMemoryGraph() {
   }, [hoverNode, graphData.links]);
 
   const paintNode = useCallback((node, ctx, globalScale) => {
+    if (node.x === undefined || node.y === undefined) return;
+
     const isHovered = hoverNode === node;
     const isNeighbor = hoverNeighbors.has(node.id);
     const isDimmed = hoverNode && !isHovered && !isNeighbor;
@@ -95,7 +97,7 @@ export default function GlobalMemoryGraph() {
     const colors = NODE_COLORS[node.kind] || NODE_COLORS.unknown;
     
     // Size based on degree
-    const baseRadius = 4 + Math.sqrt(node.val);
+    const baseRadius = 4 + Math.sqrt(node.val || 1);
     const radius = isHovered ? baseRadius * 1.2 : baseRadius;
 
     ctx.globalAlpha = isDimmed ? 0.2 : 1;
@@ -139,7 +141,7 @@ export default function GlobalMemoryGraph() {
     ctx.stroke();
 
     // --- Draw Node Label underneath ---
-    const label = node.name;
+    const label = node.name || 'unknown';
     const fontSize = isHovered ? 14 / globalScale : 10 / globalScale;
     ctx.font = `${fontSize}px Inter, sans-serif`;
     const textWidth = ctx.measureText(label).width;
@@ -152,20 +154,16 @@ export default function GlobalMemoryGraph() {
 
     // Background pill
     ctx.fillStyle = 'rgba(10, 15, 25, 0.85)'; // Dark background
-    ctx.beginPath();
-    ctx.roundRect(
-      node.x - bckgDimensions[0] / 2,
-      labelY - bckgDimensions[1] / 2,
-      bckgDimensions[0],
-      bckgDimensions[1],
-      3 / globalScale // border radius
-    );
-    ctx.fill();
+    const rectX = node.x - bckgDimensions[0] / 2;
+    const rectY = labelY - bckgDimensions[1] / 2;
+    
+    // Use standard fillRect to avoid issues with older browsers lacking roundRect
+    ctx.fillRect(rectX, rectY, bckgDimensions[0], bckgDimensions[1]);
     
     // Border for pill
     ctx.strokeStyle = colors.core;
     ctx.lineWidth = 0.5 / globalScale;
-    ctx.stroke();
+    ctx.strokeRect(rectX, rectY, bckgDimensions[0], bckgDimensions[1]);
 
     // Text
     ctx.textAlign = 'center';
@@ -230,7 +228,7 @@ export default function GlobalMemoryGraph() {
     ctx.translate(midX, midY);
     ctx.rotate(angle);
 
-    const label = link.relation;
+    const label = link.relation || 'linked';
     const fontSize = isHovered ? 8 / globalScale : 6 / globalScale;
     ctx.font = `${fontSize}px Inter, sans-serif`;
     const textWidth = ctx.measureText(label).width;
