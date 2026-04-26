@@ -251,7 +251,7 @@ async def _ai_fallback(
             
             # Extract only the chunks that match our related symbols
             for c in chunks:
-                if any(sym.lower() in c.name.lower() or sym in c.code for sym in related_symbols):
+                if any(sym.lower() in c.name.lower() or sym in c.source for sym in related_symbols):
                     relevant_chunks.append(c)
 
     # Dacă filtrarea nu a găsit nimic sau nu am avut simbol extras, 

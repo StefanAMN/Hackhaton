@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "revision": 2,
-  "updated_at": "2026-04-25T18:15:22.225668+00:00",
+  "revision": 5,
+  "updated_at": "2026-04-26T06:51:10.277153+00:00",
   "nodes": {
     "1f911028bb4143c9870dbdb4c039d168b8423e68": {
       "id": "1f911028bb4143c9870dbdb4c039d168b8423e68",
@@ -22,9 +22,47 @@
         "return"
       ],
       "updated_at": "2026-04-25T18:15:22.225526+00:00"
+    },
+    "16d1fa731bb69f4991e088bc70825bf0f7f5693d": {
+      "id": "16d1fa731bb69f4991e088bc70825bf0f7f5693d",
+      "name": "def hello():",
+      "language": "python",
+      "kind": "function",
+      "seen_count": 3,
+      "issue_count": 6,
+      "tokens": [
+        "def",
+        "hello",
+        "world",
+        "print"
+      ],
+      "updated_at": "2026-04-26T06:51:10.276546+00:00"
+    },
+    "9cd63597e5d37d0987c3c5967758308b4b856698": {
+      "id": "9cd63597e5d37d0987c3c5967758308b4b856698",
+      "name": "def world():",
+      "language": "python",
+      "kind": "function",
+      "seen_count": 1,
+      "issue_count": 2,
+      "tokens": [
+        "def",
+        "world",
+        "print",
+        "hello"
+      ],
+      "updated_at": "2026-04-26T06:51:10.277069+00:00"
     }
   },
-  "edges": {},
+  "edges": {
+    "16d1fa731bb69f4991e088bc70825bf0f7f5693d->9cd63597e5d37d0987c3c5967758308b4b856698": {
+      "source": "16d1fa731bb69f4991e088bc70825bf0f7f5693d",
+      "target": "9cd63597e5d37d0987c3c5967758308b4b856698",
+      "relation": "co_occurs",
+      "weight": 1,
+      "updated_at": "2026-04-26T06:51:10.277132+00:00"
+    }
+  },
   "issue_patterns": {
     "poten ial vulnerabilitate cross-site scripting xss problem de codificare a ie irii parametrul name este ncorporat direct n irul de ie ire folosind un f-string dac aceast func ie este utilizat ntr-un c": {
       "signature": "poten ial vulnerabilitate cross-site scripting xss problem de codificare a ie irii parametrul name este ncorporat direct n irul de ie ire folosind un f-string dac aceast func ie este utilizat ntr-un c",
@@ -49,10 +87,22 @@
       "count": 1,
       "example": "Poten\u021bial\u0103 vulnerabilitate Cross-Site Scripting (XSS) / Problem\u0103 de codificare a ie\u0219irii**: Parametrul `name` este \u00eencorporat direct \u00een \u0219irurile de ie\u0219ire (at\u00e2t cel printat, c\u00e2t \u0219i cel returnat) folosind un f-string. Dac\u0103 aceast\u0103 func\u021bie es",
       "updated_at": "2026-04-25T18:15:22.225654+00:00"
+    },
+    "hardcoded secret password": {
+      "signature": "hardcoded secret password",
+      "count": 4,
+      "example": "Hardcoded secret password.",
+      "updated_at": "2026-04-26T06:51:10.277109+00:00"
+    },
+    "sql injection vulnerability in search": {
+      "signature": "sql injection vulnerability in search",
+      "count": 4,
+      "example": "SQL Injection vulnerability in search.",
+      "updated_at": "2026-04-26T06:51:10.277121+00:00"
     }
   },
   "stats": {
-    "ingestions": 2,
-    "total_issues_observed": 4
+    "ingestions": 5,
+    "total_issues_observed": 12
   }
 }

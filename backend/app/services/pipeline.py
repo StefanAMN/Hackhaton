@@ -133,6 +133,7 @@ def _build_llm(settings: Settings) -> BaseChatModel:
         return ChatOpenAI(
             model=settings.llm_model,
             api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
             temperature=0.2,
             # store=False  ← dezactivează logging-ul pe platforma OpenAI (beta feature)
             max_retries=3,

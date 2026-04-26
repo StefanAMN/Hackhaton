@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[2] / ".env",
         env_file_encoding="utf-8",
+        extra="ignore"
     )
 
     # ── API ────────────────────────────────────────────────────────────────────
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
 
     # Chei API — setate în .env, niciodată hard-codate
     openai_api_key: str = ""
+    openai_base_url: str | None = None
     anthropic_api_key: str = ""
     google_api_key: str = ""
 
