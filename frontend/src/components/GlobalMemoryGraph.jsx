@@ -403,7 +403,7 @@ export default function GlobalMemoryGraph() {
   );
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', background: '#13131f', borderRadius: 16, overflow: 'hidden' }}>
+    <div style={{ position: 'relative', width: '100%', height: 'min(78vh, 920px)', minHeight: 560, background: '#13131f', borderRadius: 16, overflow: 'hidden' }}>
       {/* Header */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
@@ -446,7 +446,7 @@ export default function GlobalMemoryGraph() {
       {/* Canvas */}
       <canvas
         ref={canvasRef}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', cursor: 'default', paddingTop: 52 }}
+        style={{ position: 'absolute', left: 0, right: 0, top: 52, bottom: 0, width: '100%', height: 'calc(100% - 52px)', cursor: 'default' }}
         onMouseMove={onMouseMove}
         onMouseDown={onMouseDown}
         onMouseUp={onMouseUp}

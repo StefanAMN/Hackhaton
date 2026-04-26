@@ -118,7 +118,9 @@ export default function App() {
                     ← Back to Workspace
                   </button>
               </div>
-              <GlobalMemoryGraph />
+              <div style={{ width: '100%', maxWidth: 1400, margin: '0 auto' }}>
+                <GlobalMemoryGraph />
+              </div>
             </div>
           </section>
         )}
