@@ -209,6 +209,7 @@ function buildLayout(nodes, edges, w, h) {
 }
 
 export default function GlobalMemoryGraph() {
+  const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const stateRef  = useRef({ nodes: [], edges: [], nodeMap: {}, pan: { x: 0, y: 0 }, zoom: 1, dragging: null, lastMouse: null, hoveredId: null, animFrame: null });
   const [info, setInfo]       = useState({ count: 0, edges: 0, bridgeCount: 0, density: 0, components: 0, topKinds: [] });
@@ -583,9 +584,20 @@ export default function GlobalMemoryGraph() {
 
   const onWheel = useCallback(e => {
     e.preventDefault();
+    e.stopPropagation();
     const factor = e.deltaY < 0 ? 1.12 : 0.89;
     stateRef.current.zoom = Math.max(0.2, Math.min(5, stateRef.current.zoom * factor));
   }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', onWheel);
+    };
+  }, [onWheel]);
 
   const resetView = useCallback(() => {
     stateRef.current.pan  = { x: 0, y: 0 };
@@ -627,7 +639,9 @@ export default function GlobalMemoryGraph() {
   );
 
   return (
-    <div style={{
+    <div
+      ref={containerRef}
+      style={{
       position: 'relative',
       width: '100%',
       height: 'min(80vh, 950px)',
@@ -635,6 +649,7 @@ export default function GlobalMemoryGraph() {
       background: 'linear-gradient(135deg, #060917 0%, #10162e 55%, #1a1633 100%)',
       borderRadius: 18,
       overflow: 'hidden',
+      overscrollBehavior: 'contain',
       border: '1px solid rgba(255,255,255,0.08)',
       boxShadow: '0 24px 80px rgba(0,0,0,0.5), inset 0 0 120px rgba(173,111,255,0.08), inset 0 0 90px rgba(34,214,238,0.08)',
     }}>
@@ -685,7 +700,6 @@ export default function GlobalMemoryGraph() {
         onMouseDown={onMouseDown}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
-        onWheel={onWheel}
       />
 
       {/* Insight panel inspired by semantic graph dashboards */}
